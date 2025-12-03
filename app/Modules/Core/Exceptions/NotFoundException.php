@@ -1,0 +1,35 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Modules\Core\Exceptions;
+
+use Exception;
+
+/**
+ * Resource not found exception
+ */
+class NotFoundException extends Exception
+{
+    /**
+     * NotFoundException constructor
+     */
+    public function __construct(
+        string $message = 'Resource not found',
+        int $code = 404,
+        ?\Throwable $previous = null
+    ) {
+        parent::__construct($message, $code, $previous);
+    }
+
+    /**
+     * Render the exception as an HTTP response
+     */
+    public function render()
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $this->getMessage(),
+        ], 404);
+    }
+}
