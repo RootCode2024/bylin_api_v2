@@ -9,7 +9,7 @@ return [
     | Configuration for Nuxt.js SPA with credentials (cookies)
     */
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    'paths' => ['api/*', 'api/v1/*', 'sanctum/csrf-cookie'],
 
     'allowed_methods' => ['*'],
 
@@ -17,7 +17,7 @@ return [
 
     'allowed_origins_patterns' => [],
 
-    'allowed_headers' => ['Content-Type', 'X-Requested-With', 'Authorization', 'Accept', 'Origin', 'X-Session-ID'],
+    'allowed_headers' => ['Content-Type', 'X-Requested-With', 'Authorization', 'Accept', 'Origin', 'X-Session-ID', 'X-XSRF-TOKEN'],
 
     'exposed_headers' => [],
 

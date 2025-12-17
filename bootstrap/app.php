@@ -12,6 +12,21 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+
+        // --- AJOUTER CETTE LIGNE OBLIGATOIREMENT ---
+        // Elle active le support des cookies/sessions pour Sanctum sur les routes API
+        $middleware->statefulApi();
+
+
+        // API-first: Return JSON error instead of redirecting to login
+        $middleware->redirectGuestsTo(function ($request) {
+            if ($request->expectsJson() || $request->is('api/*') || $request->is('v1/*')) {
+                abort(401, 'Unauthenticated.');
+            }
+            // For web routes (if any), redirect to login
+            return route('login');
+        });
+
         // Register custom middleware aliases
         $middleware->alias([
             'admin.auth' => \App\Http\Middleware\EnsureUserIsAdmin::class,

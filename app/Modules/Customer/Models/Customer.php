@@ -11,10 +11,11 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Modules\Core\Traits\HasStatus;
 use Spatie\Permission\Traits\HasRoles;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Customer Model
- * 
+ *
  * @property string $id
  * @property string $first_name
  * @property string $last_name
@@ -133,7 +134,7 @@ class Customer extends Authenticatable
         if (!in_array($status, $this->getAvailableStatuses())) {
             throw new \InvalidArgumentException("Invalid status: {$status}");
         }
-        
+
         $this->status = $status;
         return $this->save();
     }
@@ -153,17 +154,33 @@ class Customer extends Authenticatable
     {
         $this->oauth_provider = $provider;
         $this->oauth_provider_id = $providerId;
-        
+
         if ($avatarUrl) {
             $this->avatar_url = $avatarUrl;
         }
-        
+
         // Mark email as verified for OAuth users
         if (!$this->email_verified_at) {
             $this->email_verified_at = now();
         }
-        
+
         $this->save();
+    }
+
+    /**
+     * Scope for searching customers
+     */
+    public function scopeSearch(Builder $query, ?string $term): Builder
+    {
+        if (!$term) {
+            return $query;
+        }
+
+        return $query->where(function ($q) use ($term) {
+            $q->where('first_name', 'like', "%{$term}%")
+              ->orWhere('last_name', 'like', "%{$term}%")
+              ->orWhere('email', 'like', "%{$term}%");
+        });
     }
 
     /**

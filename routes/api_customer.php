@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::prefix('v1/customer')
-    ->middleware(['auth:sanctum', 'customer.auth', 'throttle:120,1'])
+    ->middleware(['web', 'auth:sanctum', 'customer.auth', 'throttle:120,1'])
     ->name('api.customer.')
     ->group(function () {
     

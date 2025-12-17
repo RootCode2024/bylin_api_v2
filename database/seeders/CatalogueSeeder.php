@@ -13,26 +13,23 @@ class CatalogueSeeder extends Seeder
 {
     public function run(): void
     {
+        $faker = \Faker\Factory::create('fr_FR');
+
         // 1. Create Brands
-        $bylin = Brand::create([
-            'name' => 'Bylin',
-            'slug' => 'bylin',
-            'description' => 'Marque premium de vêtements et accessoires.',
-            'website' => 'https://bylin.com',
-            'is_active' => true,
-        ]);
+        $brandsData = [
+            ['name' => 'Bylin', 'slug' => 'bylin', 'description' => 'Marque premium de vêtements et accessoires.', 'website' => 'https://bylin.com', 'is_active' => true],
+            ['name' => 'Nike', 'slug' => 'nike', 'description' => 'Just Do It.', 'is_active' => true],
+            ['name' => 'Zara', 'slug' => 'zara', 'description' => 'Fast fashion leader.', 'is_active' => true],
+            ['name' => 'H&M', 'slug' => 'hm', 'description' => 'Fashion and quality at the best price.', 'is_active' => true],
+            ['name' => 'Adidas', 'slug' => 'adidas', 'description' => 'Impossible is nothing.', 'is_active' => true],
+            ['name' => 'Uniqlo', 'slug' => 'uniqlo', 'description' => 'LifeWear.', 'is_active' => true],
+            ['name' => 'Gucci', 'slug' => 'gucci', 'description' => 'Luxury fashion.', 'is_active' => true],
+        ];
 
-        $nike = Brand::create([
-            'name' => 'Nike',
-            'slug' => 'nike',
-            'is_active' => true,
-        ]);
-
-        $zara = Brand::create([
-            'name' => 'Zara',
-            'slug' => 'zara',
-            'is_active' => true,
-        ]);
+        $brands = collect();
+        foreach ($brandsData as $data) {
+            $brands->push(Brand::create($data));
+        }
 
         // 2. Create Categories Hierarchy
         // Homme
@@ -40,11 +37,13 @@ class CatalogueSeeder extends Seeder
         $hommeVetements = Category::create(['name' => 'Vêtements', 'slug' => 'homme-vetements', 'parent_id' => $homme->id, 'is_active' => true]);
         $hommeChaussures = Category::create(['name' => 'Chaussures', 'slug' => 'homme-chaussures', 'parent_id' => $homme->id, 'is_active' => true]);
         
-        // Sous-catégories Homme Vêtements
-        $tshirts = Category::create(['name' => 'T-shirts & Polos', 'slug' => 't-shirts-polos', 'parent_id' => $hommeVetements->id, 'is_active' => true]);
-        $chemises = Category::create(['name' => 'Chemises', 'slug' => 'chemises', 'parent_id' => $hommeVetements->id, 'is_active' => true]);
-        $vestes = Category::create(['name' => 'Vestes & Blazers', 'slug' => 'vestes-blazers', 'parent_id' => $hommeVetements->id, 'is_active' => true]);
-        $pantalons = Category::create(['name' => 'Pantalons', 'slug' => 'pantalons', 'parent_id' => $hommeVetements->id, 'is_active' => true]);
+        $h_subcats = collect([
+            Category::create(['name' => 'T-shirts & Polos', 'slug' => 't-shirts-polos', 'parent_id' => $hommeVetements->id, 'is_active' => true]),
+            Category::create(['name' => 'Chemises', 'slug' => 'chemises', 'parent_id' => $hommeVetements->id, 'is_active' => true]),
+            Category::create(['name' => 'Vestes & Blazers', 'slug' => 'vestes-blazers', 'parent_id' => $hommeVetements->id, 'is_active' => true]),
+            Category::create(['name' => 'Pantalons', 'slug' => 'pantalons', 'parent_id' => $hommeVetements->id, 'is_active' => true]),
+            Category::create(['name' => 'Jeans', 'slug' => 'jeans', 'parent_id' => $hommeVetements->id, 'is_active' => true]),
+        ]);
 
         // Femme
         $femme = Category::create(['name' => 'Femme', 'slug' => 'femme', 'is_active' => true]);
@@ -52,12 +51,20 @@ class CatalogueSeeder extends Seeder
         $femmeChaussures = Category::create(['name' => 'Chaussures', 'slug' => 'femme-chaussures', 'parent_id' => $femme->id, 'is_active' => true]);
         $accessoires = Category::create(['name' => 'Accessoires & Bijoux', 'slug' => 'accessoires-bijoux', 'parent_id' => $femme->id, 'is_active' => true]);
 
-        // Sous-catégories Femme Accessoires
-        $colliers = Category::create(['name' => 'Colliers', 'slug' => 'colliers', 'parent_id' => $accessoires->id, 'is_active' => true]);
-        $sacs = Category::create(['name' => 'Sacs', 'slug' => 'sacs', 'parent_id' => $accessoires->id, 'is_active' => true]);
+        $f_subcats = collect([
+            Category::create(['name' => 'Robes', 'slug' => 'robes', 'parent_id' => $femmeVetements->id, 'is_active' => true]),
+            Category::create(['name' => 'Tops & T-shirts', 'slug' => 'tops-tshirts', 'parent_id' => $femmeVetements->id, 'is_active' => true]),
+            Category::create(['name' => 'Jupes', 'slug' => 'jupes', 'parent_id' => $femmeVetements->id, 'is_active' => true]),
+            Category::create(['name' => 'Manteaux', 'slug' => 'manteaux', 'parent_id' => $femmeVetements->id, 'is_active' => true]),
+        ]);
+
+        $acc_subcats = collect([
+            Category::create(['name' => 'Colliers', 'slug' => 'colliers', 'parent_id' => $accessoires->id, 'is_active' => true]),
+            Category::create(['name' => 'Sacs', 'slug' => 'sacs', 'parent_id' => $accessoires->id, 'is_active' => true]),
+            Category::create(['name' => 'Montres', 'slug' => 'montres', 'parent_id' => $accessoires->id, 'is_active' => true]),
+        ]);
 
         // 3. Create Attributes
-        // Taille Vêtements
         $sizeClothing = Attribute::create(['name' => 'Taille', 'code' => 'size_clothing', 'type' => 'select']);
         $sizeClothing->values()->createMany([
             ['value' => 'XS', 'code' => 'XS'],
@@ -68,9 +75,11 @@ class CatalogueSeeder extends Seeder
             ['value' => 'XXL', 'code' => 'XXL'],
         ]);
 
-        // Taille Chaussures
         $sizeShoes = Attribute::create(['name' => 'Pointure', 'code' => 'size_shoes', 'type' => 'select']);
         $sizeShoes->values()->createMany([
+            ['value' => '36', 'code' => '36'],
+            ['value' => '37', 'code' => '37'],
+            ['value' => '38', 'code' => '38'],
             ['value' => '39', 'code' => '39'],
             ['value' => '40', 'code' => '40'],
             ['value' => '41', 'code' => '41'],
@@ -80,116 +89,82 @@ class CatalogueSeeder extends Seeder
             ['value' => '45', 'code' => '45'],
         ]);
 
-        // Couleurs
         $color = Attribute::create(['name' => 'Couleur', 'code' => 'color', 'type' => 'color']);
         $color->values()->createMany([
             ['value' => 'Noir', 'code' => '#000000'],
             ['value' => 'Blanc', 'code' => '#FFFFFF'],
-            ['value' => 'Bleu Marine', 'code' => '#000080'],
-            ['value' => 'Beige', 'code' => '#F5F5DC'],
+            ['value' => 'Bleu', 'code' => '#0000FF'],
             ['value' => 'Rouge', 'code' => '#FF0000'],
-            ['value' => 'Gris', 'code' => '#808080'],
+            ['value' => 'Vert', 'code' => '#008000'],
+            ['value' => 'Jaune', 'code' => '#FFFF00'],
+            ['value' => 'Rose', 'code' => '#FFC0CB'],
+            ['value' => 'Beige', 'code' => '#F5F5DC'],
         ]);
 
-        // Matière
-        $material = Attribute::create(['name' => 'Matière', 'code' => 'material', 'type' => 'select']);
-        $material->values()->createMany([
-            ['value' => 'Coton'],
-            ['value' => 'Lin'],
-            ['value' => 'Cuir'],
-            ['value' => 'Soie'],
-            ['value' => 'Denim'],
-            ['value' => 'Or 18k'],
-            ['value' => 'Argent'],
-        ]);
+        // 4. Create 60 Products
+        for ($i = 0; $i < 60; $i++) {
+            // Determine Category and Brand
+            $isMan = $faker->boolean(50);
+            $rootCat = $isMan ? $homme : $femme;
+            
+            // Subcategory Selection
+            if ($isMan) {
+                $subCat = $faker->boolean(80) ? $h_subcats->random() : $hommeChaussures;
+            } else {
+                $rand = rand(1, 100);
+                if ($rand < 60) $subCat = $f_subcats->random();
+                elseif ($rand < 90) $subCat = $acc_subcats->random();
+                else $subCat = $femmeChaussures;
+            }
 
-        // 4. Create Products
+            // Brand Logic: Bylin is primary (20%), others random
+            $brand = ($i < 12) ? $brands->firstWhere('slug', 'bylin') : $brands->random();
 
-        // --- HOMME ---
+            $name = $brand->name . ' ' . $faker->words(3, true);
+            $price = $faker->numberBetween(15000, 250000);
+            
+            $product = Product::create([
+                'brand_id' => $brand->id,
+                'name' => ucfirst($name),
+                'slug' => Str::slug($name) . '-' . Str::random(5),
+                'sku' => strtoupper(substr($brand->name, 0, 2)) . '-' . Str::upper(Str::random(6)),
+                'description' => $faker->paragraph(3),
+                'short_description' => $faker->sentence(10),
+                'price' => $price,
+                'compare_price' => $faker->boolean(30) ? $price * 1.2 : null,
+                'stock_quantity' => $faker->numberBetween(0, 100),
+                'is_active' => true,
+                'is_featured' => $faker->boolean(20),
+                'meta_data' => [
+                    'material' => $faker->randomElement(['Coton', 'Lin', 'Soie', 'Polyester', 'Laine']),
+                    'care' => 'Lavage en machine à 30°C',
+                ],
+            ]);
 
-        // Blazer Bylin Signature
-        $blazer = Product::create([
-            'brand_id' => $bylin->id,
-            'name' => 'Blazer Croisé Signature',
-            'slug' => 'blazer-croise-signature',
-            'sku' => 'BY-BLZ-001',
-            'description' => 'Un blazer croisé élégant en laine vierge, coupe ajustée. Idéal pour les occasions formelles ou un look business casual.',
-            'price' => 185000,
-            'stock_quantity' => 20,
-            'is_active' => true,
-            'is_featured' => true,
-            'requires_authenticity' => true,
-        ]);
-        $blazer->categories()->attach([$homme->id, $hommeVetements->id, $vestes->id]);
+            // Categories
+            $product->categories()->attach([$rootCat->id, $subCat->id]);
 
-        // Chemise Lin
-        $chemise = Product::create([
-            'brand_id' => $bylin->id,
-            'name' => 'Chemise en Lin Premium',
-            'slug' => 'chemise-lin-premium',
-            'sku' => 'BY-CHM-LIN-02',
-            'description' => 'Chemise légère en 100% lin, parfaite pour l\'été. Col mao et boutons en nacre.',
-            'price' => 45000,
-            'stock_quantity' => 50,
-            'is_active' => true,
-        ]);
-        $chemise->categories()->attach([$homme->id, $hommeVetements->id, $chemises->id]);
+            // Image Placeholder (Unsplash)
+            // Note: In real setup, we would attach media via Spatie Medialibrary
+            // simulating via attributes if needed or just trusting the mock controller for now
+            // But since we want "real data" for the future:
+            // $product->addMediaFromUrl(...)->toMediaCollection('images'); (Skipped to avoid HTTP calls during seed)
 
-        // T-shirt Basique
-        $tshirt = Product::create([
-            'brand_id' => $bylin->id,
-            'name' => 'T-shirt Coton Pima',
-            'slug' => 't-shirt-coton-pima',
-            'sku' => 'BY-TSH-003',
-            'description' => 'Le t-shirt parfait. Coton Pima ultra-doux, coupe moderne, ne bouloche pas.',
-            'price' => 25000,
-            'stock_quantity' => 100,
-            'is_active' => true,
-        ]);
-        $tshirt->categories()->attach([$homme->id, $hommeVetements->id, $tshirts->id]);
-
-        // Sneakers
-        $sneakers = Product::create([
-            'brand_id' => $nike->id,
-            'name' => 'Air Force 1 Low',
-            'slug' => 'air-force-1-low',
-            'sku' => 'NK-AF1-001',
-            'description' => 'La légende continue de vivre avec la Nike Air Force 1 \'07.',
-            'price' => 85000,
-            'stock_quantity' => 30,
-            'is_active' => true,
-        ]);
-        $sneakers->categories()->attach([$homme->id, $hommeChaussures->id]);
-
-        // --- FEMME ---
-
-        // Collier Or
-        $collier = Product::create([
-            'brand_id' => $bylin->id,
-            'name' => 'Collier Chaîne Or Fin',
-            'slug' => 'collier-chaine-or-fin',
-            'sku' => 'BY-JW-001',
-            'description' => 'Collier délicat en plaqué or 18 carats. Un intemporel à porter seul ou en accumulation.',
-            'price' => 35000,
-            'stock_quantity' => 15,
-            'is_active' => true,
-            'is_featured' => true,
-        ]);
-        $collier->categories()->attach([$femme->id, $accessoires->id, $colliers->id]);
-
-        // Robe Soie (Pre-order)
-        $robe = Product::create([
-            'brand_id' => $bylin->id,
-            'name' => 'Robe Soie Soirée (Précommande)',
-            'slug' => 'robe-soie-soiree',
-            'sku' => 'BY-DRS-PRE-01',
-            'description' => 'Robe longue en soie véritable. Disponible en précommande pour la collection d\'hiver.',
-            'price' => 120000,
-            'stock_quantity' => 0,
-            'is_active' => true,
-            'is_preorder_enabled' => true,
-            'preorder_available_date' => now()->addMonths(1),
-        ]);
-        $robe->categories()->attach([$femme->id, $femmeVetements->id]);
+            // Variations
+            // Only for clothing usually
+            if ($subCat->parent_id === $hommeVetements->id || $subCat->parent_id === $femmeVetements->id) {
+                // S, M, L
+                foreach (['S', 'M', 'L'] as $size) {
+                    $product->variations()->create([
+                        'sku' => $product->sku . '-' . $size,
+                        'variation_name' => $size,
+                        'price' => $product->price,
+                        'stock_quantity' => $faker->numberBetween(0, 20),
+                        'is_active' => true,
+                        'attributes' => ['size' => $size],
+                    ]);
+                }
+            }
+        }
     }
 }

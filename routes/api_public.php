@@ -15,10 +15,14 @@ Route::prefix('v1')->group(function () {
     Route::post('/verify-qr/{qrCode}', [\Modules\Catalogue\Http\Controllers\AuthenticityController::class, 'verify'])
         ->middleware('throttle:30,1')
         ->name('api.verify-qr');
+
+    // Global Content
+    Route::get('/content/home', [\Modules\Core\Http\Controllers\HomeContentController::class, 'index'])
+        ->name('content.home');
     
     // Authentication - Stricter rate limiting
     Route::prefix('auth')->name('api.auth.')->group(function () {
-        // Admin auth
+        // Admin auth (stateless tokens)
         Route::post('/admin/login', [\Modules\User\Http\Controllers\AuthController::class, 'login'])
             ->middleware('throttle:5,1')
             ->name('admin.login');
@@ -26,21 +30,23 @@ Route::prefix('v1')->group(function () {
             ->middleware('throttle:3,1')
             ->name('admin.register');
         
-        // Customer auth
-        Route::post('/customer/register', [\Modules\Customer\Http\Controllers\CustomerAuthController::class, 'register'])
-            ->middleware('throttle:5,1')
-            ->name('customer.register');
-        Route::post('/customer/login', [\Modules\Customer\Http\Controllers\CustomerAuthController::class, 'login'])
-            ->middleware('throttle:10,1')
-            ->name('customer.login');
-        
-        // Google OAuth
-        Route::get('/customer/google/redirect', [\Modules\Customer\Http\Controllers\CustomerAuthController::class, 'googleRedirect'])
-            ->middleware('throttle:10,1')
-            ->name('customer.google.redirect');
-        Route::get('/customer/google/callback', [\Modules\Customer\Http\Controllers\CustomerAuthController::class, 'googleCallback'])
-            ->middleware('throttle:10,1')
-            ->name('customer.google.callback');
+        // Customer auth (stateful - HTTP-only cookies with sessions)
+        Route::middleware('web')->group(function () {
+            Route::post('/customer/register', [\Modules\Customer\Http\Controllers\CustomerAuthController::class, 'register'])
+                ->middleware('throttle:5,1')
+                ->name('customer.register');
+            Route::post('/customer/login', [\Modules\Customer\Http\Controllers\CustomerAuthController::class, 'login'])
+                ->middleware('throttle:10,1')
+                ->name('customer.login');
+            
+            // Google OAuth
+            Route::get('/customer/google/redirect', [\Modules\Customer\Http\Controllers\CustomerAuthController::class, 'googleRedirect'])
+                ->middleware('throttle:10,1')
+                ->name('customer.google.redirect');
+            Route::get('/customer/google/callback', [\Modules\Customer\Http\Controllers\CustomerAuthController::class, 'googleCallback'])
+                ->middleware('throttle:10,1')
+                ->name('customer.google.callback');
+        });
     });
 
     

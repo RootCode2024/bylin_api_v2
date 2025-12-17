@@ -22,8 +22,8 @@ return new class extends Migration
             $table->string('last_ip', 45);
             $table->string('last_country', 100)->nullable();
             $table->string('last_city', 100)->nullable();
-            $table->timestamp('first_seen_at');
-            $table->timestamp('last_seen_at');
+            $table->timestamp('first_seen_at')->default(now());
+            $table->timestamp('last_seen_at')->default(now());
             $table->boolean('is_trusted')->default(false);
             $table->boolean('is_blocked')->default(false);
             $table->string('blocked_reason')->nullable();

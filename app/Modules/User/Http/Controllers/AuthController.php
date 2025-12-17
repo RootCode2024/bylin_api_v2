@@ -38,7 +38,7 @@ class AuthController extends ApiController
 
         if (!$user || !Hash::check($validated['password'], $user->password)) {
             $this->loginHistoryService->recordFailedLogin($request->ip(), $validated['email']);
-            
+
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
@@ -55,10 +55,10 @@ class AuthController extends ApiController
         // Regenerate session to prevent fixation
         $request->session()->regenerate();
 
-        return $this->successResponse([
+        return response()->json([
             'user' => $user->load('roles.permissions'),
             'two_factor' => false, // Pour future implementation 2FA
-        ], 'Login successful');
+        ]);
     }
 
     /**
@@ -102,9 +102,9 @@ class AuthController extends ApiController
      */
     public function me(Request $request): JsonResponse
     {
-        return $this->successResponse(
+        return response()->json([
             $request->user()->load('roles.permissions')
-        );
+        ]);
     }
 
     /**

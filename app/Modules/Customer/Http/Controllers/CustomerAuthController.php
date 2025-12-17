@@ -4,16 +4,17 @@ declare(strict_types=1);
 
 namespace Modules\Customer\Http\Controllers;
 
-use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
-use Laravel\Socialite\Facades\Socialite;
-use Modules\Core\Http\Controllers\ApiController;
 use Modules\Customer\Models\Customer;
+use Laravel\Socialite\Facades\Socialite;
+use Illuminate\Validation\ValidationException;
 use Modules\Customer\Services\CustomerService;
+use Modules\Core\Http\Controllers\ApiController;
 use Modules\Security\Services\LoginHistoryService;
 
 /**
@@ -70,7 +71,7 @@ class CustomerAuthController extends ApiController
 
         if (!$customer || !Hash::check($validated['password'], $customer->password)) {
             $this->loginHistoryService->recordFailedLogin($request->ip(), $validated['email']);
-            
+
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
@@ -101,35 +102,35 @@ class CustomerAuthController extends ApiController
     private function mergeGuestCart(Request $request, string $customerId): void
     {
         $sessionId = $request->header('X-Session-ID');
-        
+
         if (!$sessionId) {
             return; // No guest cart to merge
         }
 
         try {
             $cartService = app(\Modules\Cart\Services\CartService::class);
-            
+
             // Get guest cart
             $guestCart = \Modules\Cart\Models\Cart::forSession($sessionId)->active()->first();
-            
+
             if (!$guestCart || $guestCart->items->isEmpty()) {
                 return; // No guest cart or empty
             }
-            
+
             // Get or create customer cart
             $customerCart = $cartService->getCart($customerId);
-            
+
             // Merge carts
             $cartService->mergeCarts($guestCart, $customerCart);
-            
-            \Log::info('Guest cart merged into customer cart', [
+
+            Log::info('Guest cart merged into customer cart', [
                 'customer_id' => $customerId,
                 'session_id' => $sessionId,
                 'items_merged' => $guestCart->items->count(),
             ]);
         } catch (\Exception $e) {
             // Don't fail login if cart merge fails
-            \Log::error('Failed to merge guest cart', [
+            Log::error('Failed to merge guest cart', [
                 'customer_id' => $customerId,
                 'session_id' => $sessionId,
                 'error' => $e->getMessage(),
@@ -182,7 +183,7 @@ class CustomerAuthController extends ApiController
                 'state' => $state,
             ]);
         } catch (\Exception $e) {
-            \Log::error('Google OAuth redirect failed', [
+            Log::error('Google OAuth redirect failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -202,7 +203,7 @@ class CustomerAuthController extends ApiController
             $requestState = $request->query('state');
 
             if (!$sessionState || $sessionState !== $requestState) {
-                \Log::warning('OAuth state mismatch detected', [
+                Log::warning('OAuth state mismatch detected', [
                     'session_state' => $sessionState,
                     'request_state' => $requestState,
                     'ip' => $request->ip(),
@@ -242,7 +243,7 @@ class CustomerAuthController extends ApiController
                     $googleUser->getAvatar()
                 );
 
-                \Log::info('Google account linked to existing customer', [
+                Log::info('Google account linked to existing customer', [
                     'customer_id' => $customer->id,
                     'email' => $customer->email,
                     'ip' => $request->ip(),
@@ -266,7 +267,7 @@ class CustomerAuthController extends ApiController
                 'status' => 'active',
             ]);
 
-            \Log::info('New customer registered via Google OAuth', [
+            Log::info('New customer registered via Google OAuth', [
                 'customer_id' => $customer->id,
                 'email' => $customer->email,
                 'ip' => $request->ip(),
@@ -278,14 +279,14 @@ class CustomerAuthController extends ApiController
             return $this->loginOAuthCustomer($request, $customer, 'new_registration');
 
         } catch (\Laravel\Socialite\Two\InvalidStateException $e) {
-            \Log::error('Google OAuth invalid state exception', [
+            Log::error('Google OAuth invalid state exception', [
                 'error' => $e->getMessage(),
                 'ip' => $request->ip(),
             ]);
 
             return $this->errorResponse('OAuth session expired. Please try again.', 400);
         } catch (\Exception $e) {
-            \Log::error('Google OAuth callback failed', [
+            Log::error('Google OAuth callback failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'ip' => $request->ip(),
@@ -315,7 +316,7 @@ class CustomerAuthController extends ApiController
         $this->mergeGuestCart($request, $customer->id);
 
         // Log activity
-        \Log::info('Customer logged in via Google OAuth', [
+        Log::info('Customer logged in via Google OAuth', [
             'customer_id' => $customer->id,
             'email' => $customer->email,
             'login_type' => $loginType,
@@ -345,7 +346,7 @@ class CustomerAuthController extends ApiController
         }
 
         $parts = explode(' ', trim($fullName), 2);
-        
+
         return [
             'first_name' => $parts[0] ?? 'User',
             'last_name' => $parts[1] ?? 'Google',
