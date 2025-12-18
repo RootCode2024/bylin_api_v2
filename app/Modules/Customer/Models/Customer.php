@@ -6,6 +6,7 @@ namespace Modules\Customer\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -23,10 +24,11 @@ use Illuminate\Database\Eloquent\Builder;
  * @property string $phone
  * @property string $status
  * @property array $preferences
+ * @property \Illuminate\Support\Carbon|null $deleted_at
  */
 class Customer extends Authenticatable
 {
-    use HasApiTokens, HasFactory, HasUuids, Notifiable, HasStatus, HasRoles;
+    use HasApiTokens, HasFactory, HasUuids, Notifiable, HasStatus, HasRoles, SoftDeletes;
 
     /**
      * The guard name
@@ -59,6 +61,7 @@ class Customer extends Authenticatable
         'preferences',
         'oauth_provider',
         'oauth_provider_id',
+        'status',
     ];
 
     /**
@@ -140,6 +143,46 @@ class Customer extends Authenticatable
     }
 
     /**
+     * Activate customer account
+     */
+    public function activate(): bool
+    {
+        return $this->updateStatus('active');
+    }
+
+    /**
+     * Deactivate customer account
+     */
+    public function deactivate(): bool
+    {
+        return $this->updateStatus('inactive');
+    }
+
+    /**
+     * Suspend customer account
+     */
+    public function suspend(): bool
+    {
+        return $this->updateStatus('suspended');
+    }
+
+    /**
+     * Check if customer is active
+     */
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    /**
+     * Check if customer is suspended
+     */
+    public function isSuspended(): bool
+    {
+        return $this->status === 'suspended';
+    }
+
+    /**
      * Check if customer has an OAuth provider linked
      */
     public function hasOAuthProvider(): bool
@@ -168,6 +211,38 @@ class Customer extends Authenticatable
     }
 
     /**
+     * Update customer information safely
+     */
+    public function updateInformation(array $data): bool
+    {
+        $allowed = ['first_name', 'last_name', 'phone', 'date_of_birth', 'gender', 'preferences'];
+        $filtered = array_intersect_key($data, array_flip($allowed));
+
+        return $this->update($filtered);
+    }
+
+    /**
+     * Get customer data for export
+     */
+    public function toExportArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'full_name' => $this->full_name,
+            'first_name' => $this->first_name,
+            'last_name' => $this->last_name,
+            'email' => $this->email,
+            'phone' => $this->phone,
+            'status' => $this->status,
+            'date_of_birth' => $this->date_of_birth?->format('Y-m-d'),
+            'gender' => $this->gender,
+            'email_verified_at' => $this->email_verified_at?->format('Y-m-d H:i:s'),
+            'created_at' => $this->created_at->format('Y-m-d H:i:s'),
+            'updated_at' => $this->updated_at->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    /**
      * Scope for searching customers
      */
     public function scopeSearch(Builder $query, ?string $term): Builder
@@ -178,9 +253,34 @@ class Customer extends Authenticatable
 
         return $query->where(function ($q) use ($term) {
             $q->where('first_name', 'like', "%{$term}%")
-              ->orWhere('last_name', 'like', "%{$term}%")
-              ->orWhere('email', 'like', "%{$term}%");
+                ->orWhere('last_name', 'like', "%{$term}%")
+                ->orWhere('email', 'like', "%{$term}%")
+                ->orWhere('phone', 'like', "%{$term}%");
         });
+    }
+
+    /**
+     * Scope for active customers only
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('status', 'active');
+    }
+
+    /**
+     * Scope for inactive customers only
+     */
+    public function scopeInactive(Builder $query): Builder
+    {
+        return $query->where('status', 'inactive');
+    }
+
+    /**
+     * Scope for suspended customers only
+     */
+    public function scopeSuspended(Builder $query): Builder
+    {
+        return $query->where('status', 'suspended');
     }
 
     /**
@@ -189,5 +289,18 @@ class Customer extends Authenticatable
     protected static function boot(): void
     {
         parent::boot();
+
+        // Automatically set status to inactive when soft deleting
+        static::deleting(function ($customer) {
+            if (!$customer->isForceDeleting()) {
+                $customer->status = 'inactive';
+                $customer->saveQuietly();
+            }
+        });
+
+        // Restore status to active when restoring
+        static::restoring(function ($customer) {
+            $customer->status = 'active';
+        });
     }
 }

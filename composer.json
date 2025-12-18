@@ -7,11 +7,13 @@
     "require": {
         "php": "^8.2",
         "dedoc/scramble": "^0.13.6",
+        "dompdf/dompdf": "^3.1",
         "jenssegers/agent": "^2.6",
         "laravel/framework": "^11.9",
         "laravel/sanctum": "^4.0",
         "laravel/socialite": "^5.23",
         "laravel/tinker": "^2.9",
+        "maatwebsite/excel": "^3.1",
         "predis/predis": "^2.0",
         "spatie/laravel-data": "^4.18",
         "spatie/laravel-medialibrary": "^11.17",

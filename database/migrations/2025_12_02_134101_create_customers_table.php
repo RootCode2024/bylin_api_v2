@@ -21,16 +21,27 @@ return new class extends Migration
             $table->string('password');
             $table->string('status')->default('active');
             $table->date('date_of_birth')->nullable();
-            $table->string('gender')->nullable();
-            $table->string('avatar')->nullable();
+            $table->enum('gender', ['male', 'female', 'other'])->nullable();
+
+            // Avatar fields
+            $table->string('avatar')->nullable(); // Local avatar path
+            $table->string('avatar_url')->nullable(); // OAuth or external avatar URL
+
+            // OAuth fields
+            $table->string('oauth_provider')->nullable(); // google, facebook, etc.
+            $table->string('oauth_provider_id')->nullable();
+
             $table->json('preferences')->nullable();
             $table->rememberToken();
             $table->timestamps();
             $table->softDeletes();
 
+            // Indexes
             $table->index('email');
             $table->index('phone');
             $table->index('status');
+            $table->index('deleted_at');
+            $table->index(['oauth_provider', 'oauth_provider_id']);
         });
     }
 
