@@ -61,7 +61,7 @@ class OrderSeeder extends Seeder
                 // These will be recalculated below
                 'subtotal' => 0,
                 'tax_amount' => 0,
-                'shipping_amount' => 2000, 
+                'shipping_amount' => 2000,
                 'total' => 0,
             ]);
 
@@ -78,10 +78,11 @@ class OrderSeeder extends Seeder
                     'order_id' => $order->id,
                     'product_id' => $product->id,
                     'product_name' => $product->name,
-                    'sku' => $product->sku,
+                    'product_sku' => $product->sku,
                     'price' => $price,
                     'quantity' => $quantity,
-                    'total_price' => $price * $quantity,
+                    'subtotal' => $price * $quantity,
+                    'total' => $price * $quantity,
                 ]);
 
                 $subtotal += ($price * $quantity);

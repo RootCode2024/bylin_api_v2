@@ -17,6 +17,9 @@
         "spatie/laravel-medialibrary": "^11.17",
         "spatie/laravel-permission": "^6.23",
         "spatie/laravel-query-builder": "^6.3",
+        "symfony/console": "^7.4",
+        "symfony/event-dispatcher": "^7.4",
+        "symfony/string": "^7.4",
         "torann/geoip": "^3.0"
     },
     "require-dev": {

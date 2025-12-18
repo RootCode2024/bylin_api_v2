@@ -28,6 +28,15 @@ class CustomerController extends ApiController
     }
 
     /**
+     * Show a single customer
+     */
+    public function show(string $id): JsonResponse
+    {
+        $customer = Customer::findOrFail($id);
+        return $this->successResponse($customer);
+    }
+
+    /**
      * Store a newly created customer.
      */
     public function store(Request $request): JsonResponse

@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Modules\User\Http\Controllers;
 
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\Core\Http\Controllers\ApiController;
 use Modules\User\Models\User;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Hash;
 use Modules\User\Services\UserService;
+use Modules\Core\Http\Controllers\ApiController;
 
 /**
  * Admin User Management Controller
@@ -79,7 +80,7 @@ class UserController extends ApiController
         $user->update($validated);
 
         if (isset($validated['password'])) {
-            $user->update(['password' => \Hash::make($validated['password'])]);
+            $user->update(['password' => Hash::make($validated['password'])]);
         }
 
         if (isset($validated['role'])) {
@@ -95,7 +96,7 @@ class UserController extends ApiController
     public function destroy(string $id): JsonResponse
     {
         $user = User::findOrFail($id);
-        
+
         if ($user->id === auth()->id()) {
             return $this->errorResponse('Cannot delete yourself', 403);
         }
