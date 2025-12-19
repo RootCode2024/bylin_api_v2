@@ -41,6 +41,14 @@ Route::prefix('v1/admin')
     Route::apiResource('products', \Modules\Catalogue\Http\Controllers\Admin\ProductController::class);
     Route::apiResource('categories', \Modules\Catalogue\Http\Controllers\Admin\CategoryController::class);
     Route::apiResource('brands', \Modules\Catalogue\Http\Controllers\Admin\BrandController::class);
+    Route::post('/brands/{id}/restore', [\Modules\Catalogue\Http\Controllers\Admin\BrandController::class, 'restore']);
+    Route::delete('/brands/{id}/force', [\Modules\Catalogue\Http\Controllers\Admin\BrandController::class, 'forceDelete']);
+
+    // Routes bulk
+    Route::post('/brands/bulk/destroy', [\Modules\Catalogue\Http\Controllers\Admin\BrandController::class, 'bulkDestroy']);
+    Route::post('/brands/bulk/restore', [\Modules\Catalogue\Http\Controllers\Admin\BrandController::class, 'bulkRestore']);
+    Route::post('/brands/bulk/force-delete', [\Modules\Catalogue\Http\Controllers\Admin\BrandController::class, 'bulkForceDelete']);
+
     Route::apiResource('attributes', \Modules\Catalogue\Http\Controllers\Admin\AttributeController::class);
 
     // Preorder Management

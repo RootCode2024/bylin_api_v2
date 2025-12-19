@@ -6,14 +6,16 @@ namespace Modules\Catalogue\Models;
 
 use Modules\Core\Models\BaseModel;
 use Modules\Core\Traits\Searchable;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Brand Model
- * 
+ *
  * @property string $id
  * @property string $name
  * @property string $slug
  * @property bool $is_active
+ * @property string|null $logo_url
  */
 class Brand extends BaseModel
 {
@@ -32,6 +34,9 @@ class Brand extends BaseModel
         'meta_data',
     ];
 
+    // Ajouter logo_url aux attributs retournés automatiquement
+    protected $appends = ['logo_url'];
+
     protected function casts(): array
     {
         return [
@@ -42,6 +47,26 @@ class Brand extends BaseModel
             'updated_at' => 'datetime',
             'deleted_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Get the full URL for the logo
+     */
+    public function getLogoUrlAttribute(): ?string
+    {
+        if (!$this->logo) {
+            return null;
+        }
+
+        // Si le logo est déjà une URL complète
+        if (filter_var($this->logo, FILTER_VALIDATE_URL)) {
+            return $this->logo;
+        }
+
+        // Destion de l'URL complète depuis le storage
+        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+        $disk = Storage::disk('public');
+        return $disk->url($this->logo);
     }
 
     /**
@@ -74,5 +99,12 @@ class Brand extends BaseModel
     public function scopeWithProducts($query)
     {
         return $query->has('products');
+    }
+
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('logo')
+            ->singleFile()
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']);
     }
 }

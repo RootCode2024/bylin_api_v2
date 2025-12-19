@@ -4,7 +4,7 @@ namespace Modules\Catalogue\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class StoreBrandRequest extends FormRequest
+class UpdateBrandRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -22,7 +22,7 @@ class StoreBrandRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name'        => 'required|string|max:100|unique:brands,name',
+            'name'        => 'required|string|max:100|unique:brands,name,' . $this->route('brand'),
             'description' => 'nullable|string|max:2000',
             'logo'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
             'website'     => 'nullable|url|max:150',
