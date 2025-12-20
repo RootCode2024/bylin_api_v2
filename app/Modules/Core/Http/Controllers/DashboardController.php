@@ -7,6 +7,7 @@ namespace Modules\Core\Http\Controllers;
 use Illuminate\Http\Request;
 use Modules\Order\Models\Order;
 use Illuminate\Http\JsonResponse;
+use Modules\Catalogue\Models\Attribute;
 use Modules\Catalogue\Models\Brand;
 use Modules\Catalogue\Models\Category;
 use Modules\Reviews\Models\Review;
@@ -23,6 +24,7 @@ class DashboardController extends ApiController
             'products' => Product::count(),
             'brands' => Brand::count(),
             'categories' => Category::count(),
+            'attributes' => Attribute::count(),
             'reviews' => Review::where('status', 'pending')->count(),
         ];
 

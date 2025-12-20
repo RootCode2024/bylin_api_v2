@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace Modules\Catalogue\Models;
 
 use Modules\Core\Models\BaseModel;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Product Variation Model
- * 
+ *
  * @property string $id
  * @property string $product_id
  * @property string $sku
@@ -17,6 +18,8 @@ use Modules\Core\Models\BaseModel;
  */
 class ProductVariation extends BaseModel
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'product_id',
         'sku',

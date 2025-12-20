@@ -461,15 +461,17 @@ class CatalogueSeeder extends Seeder
             'name' => 'Taille',
             'code' => 'size_clothing',
             'type' => 'select',
+            'is_filterable' => true,
+            'sort_order' => 1,
         ]);
         $sizeClothing->values()->createMany([
-            ['value' => 'XS', 'code' => 'XS', 'sort_order' => 1],
-            ['value' => 'S', 'code' => 'S', 'sort_order' => 2],
-            ['value' => 'M', 'code' => 'M', 'sort_order' => 3],
-            ['value' => 'L', 'code' => 'L', 'sort_order' => 4],
-            ['value' => 'XL', 'code' => 'XL', 'sort_order' => 5],
-            ['value' => 'XXL', 'code' => 'XXL', 'sort_order' => 6],
-            ['value' => '3XL', 'code' => '3XL', 'sort_order' => 7],
+            ['value' => 'xs', 'label' => 'XS', 'sort_order' => 1],
+            ['value' => 's', 'label' => 'S', 'sort_order' => 2],
+            ['value' => 'm', 'label' => 'M', 'sort_order' => 3],
+            ['value' => 'l', 'label' => 'L', 'sort_order' => 4],
+            ['value' => 'xl', 'label' => 'XL', 'sort_order' => 5],
+            ['value' => 'xxl', 'label' => 'XXL', 'sort_order' => 6],
+            ['value' => '3xl', 'label' => '3XL', 'sort_order' => 7],
         ]);
         $attributes->push($sizeClothing);
 
@@ -478,12 +480,14 @@ class CatalogueSeeder extends Seeder
             'name' => 'Pointure',
             'code' => 'size_shoes',
             'type' => 'select',
+            'is_filterable' => true,
+            'sort_order' => 2,
         ]);
         $shoeSizes = [];
         for ($i = 35; $i <= 46; $i++) {
             $shoeSizes[] = [
                 'value' => (string) $i,
-                'code' => (string) $i,
+                'label' => (string) $i,
                 'sort_order' => $i - 34,
             ];
         }
@@ -495,20 +499,22 @@ class CatalogueSeeder extends Seeder
             'name' => 'Couleur',
             'code' => 'color',
             'type' => 'color',
+            'is_filterable' => true,
+            'sort_order' => 3,
         ]);
         $color->values()->createMany([
-            ['value' => 'Noir', 'code' => '#000000', 'sort_order' => 1],
-            ['value' => 'Blanc', 'code' => '#FFFFFF', 'sort_order' => 2],
-            ['value' => 'Gris', 'code' => '#808080', 'sort_order' => 3],
-            ['value' => 'Bleu marine', 'code' => '#000080', 'sort_order' => 4],
-            ['value' => 'Bleu ciel', 'code' => '#87CEEB', 'sort_order' => 5],
-            ['value' => 'Rouge', 'code' => '#FF0000', 'sort_order' => 6],
-            ['value' => 'Vert', 'code' => '#008000', 'sort_order' => 7],
-            ['value' => 'Jaune', 'code' => '#FFFF00', 'sort_order' => 8],
-            ['value' => 'Rose', 'code' => '#FFC0CB', 'sort_order' => 9],
-            ['value' => 'Beige', 'code' => '#F5F5DC', 'sort_order' => 10],
-            ['value' => 'Marron', 'code' => '#A52A2A', 'sort_order' => 11],
-            ['value' => 'Orange', 'code' => '#FFA500', 'sort_order' => 12],
+            ['value' => 'noir', 'label' => 'Noir', 'color_code' => '#000000', 'sort_order' => 1],
+            ['value' => 'blanc', 'label' => 'Blanc', 'color_code' => '#FFFFFF', 'sort_order' => 2],
+            ['value' => 'gris', 'label' => 'Gris', 'color_code' => '#808080', 'sort_order' => 3],
+            ['value' => 'bleu_marine', 'label' => 'Bleu marine', 'color_code' => '#000080', 'sort_order' => 4],
+            ['value' => 'bleu_ciel', 'label' => 'Bleu ciel', 'color_code' => '#87CEEB', 'sort_order' => 5],
+            ['value' => 'rouge', 'label' => 'Rouge', 'color_code' => '#FF0000', 'sort_order' => 6],
+            ['value' => 'vert', 'label' => 'Vert', 'color_code' => '#008000', 'sort_order' => 7],
+            ['value' => 'jaune', 'label' => 'Jaune', 'color_code' => '#FFFF00', 'sort_order' => 8],
+            ['value' => 'rose', 'label' => 'Rose', 'color_code' => '#FFC0CB', 'sort_order' => 9],
+            ['value' => 'beige', 'label' => 'Beige', 'color_code' => '#F5F5DC', 'sort_order' => 10],
+            ['value' => 'marron', 'label' => 'Marron', 'color_code' => '#A52A2A', 'sort_order' => 11],
+            ['value' => 'orange', 'label' => 'Orange', 'color_code' => '#FFA500', 'sort_order' => 12],
         ]);
         $attributes->push($color);
 
