@@ -25,6 +25,7 @@ return new class extends Migration
             $table->foreignUuid('attribute_id')->constrained()->cascadeOnDelete();
             $table->string('value');
             $table->string('code')->nullable(); // hex code for colors, etc.
+            $table->unsignedInteger('sort_order')->nullable();
             $table->timestamps();
             $table->softDeletes();
         });

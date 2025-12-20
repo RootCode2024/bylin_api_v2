@@ -40,6 +40,47 @@ Route::prefix('v1/admin')
     // Catalogue Management
     Route::apiResource('products', \Modules\Catalogue\Http\Controllers\Admin\ProductController::class);
     Route::apiResource('categories', \Modules\Catalogue\Http\Controllers\Admin\CategoryController::class);
+    Route::prefix('categories')->name('categories.')->group(function () {
+
+        // Arbre hiérarchique
+        Route::get('tree', [\Modules\Catalogue\Http\Controllers\Admin\CategoryController::class, 'tree'])
+            ->name('tree');
+
+        // Statistiques
+        Route::get('statistics', [\Modules\Catalogue\Http\Controllers\Admin\CategoryController::class, 'statistics'])
+            ->name('statistics');
+
+        // Fil d'Ariane
+        Route::get('{id}/breadcrumb', [\Modules\Catalogue\Http\Controllers\Admin\CategoryController::class, 'breadcrumb'])
+            ->name('breadcrumb');
+
+        // Restauration
+        Route::post('{id}/restore', [\Modules\Catalogue\Http\Controllers\Admin\CategoryController::class, 'restore'])
+            ->name('restore');
+
+        // Suppression définitive
+        Route::delete('{id}/force', [\Modules\Catalogue\Http\Controllers\Admin\CategoryController::class, 'forceDelete'])
+            ->name('force-delete');
+
+        // Déplacement
+        Route::patch('{id}/move', [\Modules\Catalogue\Http\Controllers\Admin\CategoryController::class, 'move'])
+            ->name('move');
+
+        // Réordonnancement
+        Route::post('reorder', [\Modules\Catalogue\Http\Controllers\Admin\CategoryController::class, 'reorder'])
+            ->name('reorder');
+
+        // Opérations en masse
+        Route::prefix('bulk')->name('bulk.')->group(function () {
+            Route::post('destroy', [\Modules\Catalogue\Http\Controllers\Admin\CategoryController::class, 'bulkDestroy'])
+                ->name('destroy');
+            Route::post('restore', [\Modules\Catalogue\Http\Controllers\Admin\CategoryController::class, 'bulkRestore'])
+                ->name('restore');
+            Route::post('force-delete', [\Modules\Catalogue\Http\Controllers\Admin\CategoryController::class, 'bulkForceDelete'])
+                ->name('force-delete');
+        });
+    });
+
     Route::apiResource('brands', \Modules\Catalogue\Http\Controllers\Admin\BrandController::class);
     Route::post('/brands/{id}/restore', [\Modules\Catalogue\Http\Controllers\Admin\BrandController::class, 'restore']);
     Route::delete('/brands/{id}/force', [\Modules\Catalogue\Http\Controllers\Admin\BrandController::class, 'forceDelete']);

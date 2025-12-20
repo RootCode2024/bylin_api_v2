@@ -6,11 +6,11 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * Requête de création de catégorie
+ * Requête de mise à jour de catégorie
  *
- * Valide les données lors de la création d'une nouvelle catégorie.
+ * Valide les données lors de la modification d'une catégorie existante.
  */
-class StoreCategoryRequest extends FormRequest
+class UpdateCategoryRequest extends FormRequest
 {
     /**
      * Détermine si l'utilisateur est autorisé à faire cette requête
@@ -25,17 +25,31 @@ class StoreCategoryRequest extends FormRequest
      */
     public function rules(): array
     {
+        $categoryId = $this->route('category') ?? $this->route('id');
+
         return [
             // Hiérarchie
             'parent_id' => [
                 'nullable',
                 'uuid',
                 'exists:categories,id',
-                function ($attribute, $value, $fail) {
+                function ($attribute, $value, $fail) use ($categoryId) {
+                    // Ne peut pas se définir comme son propre parent
+                    if ($value === $categoryId) {
+                        $fail('Une catégorie ne peut pas être son propre parent.');
+                    }
+
+                    // Ne peut pas définir un enfant comme parent (éviter les boucles)
                     if ($value) {
-                        $parent = \Modules\Catalogue\Models\Category::find($value);
-                        // Vérifier la profondeur maximale (ex: 3 niveaux)
-                        if ($parent && $parent->level >= 3) {
+                        $category = \Modules\Catalogue\Models\Category::find($categoryId);
+                        $newParent = \Modules\Catalogue\Models\Category::find($value);
+
+                        if ($category && $newParent && $category->isAncestorOf($newParent)) {
+                            $fail('Impossible de définir une sous-catégorie comme parent.');
+                        }
+
+                        // Vérifier la profondeur maximale
+                        if ($newParent && $newParent->level >= 3) {
                             $fail('La profondeur maximale de catégories est atteinte.');
                         }
                     }
@@ -44,7 +58,7 @@ class StoreCategoryRequest extends FormRequest
 
             // Informations de base
             'name' => [
-                'required',
+                'sometimes',
                 'string',
                 'min:2',
                 'max:100',
@@ -60,7 +74,11 @@ class StoreCategoryRequest extends FormRequest
                 'nullable',
                 'image',
                 'mimes:jpeg,jpg,png,webp',
-                'max:2048', // 2MB
+                'max:2048',
+            ],
+            'remove_image' => [
+                'sometimes',
+                'boolean',
             ],
             'icon' => [
                 'nullable',
@@ -70,7 +88,7 @@ class StoreCategoryRequest extends FormRequest
             'color' => [
                 'nullable',
                 'string',
-                'regex:/^#[0-9A-F]{6}$/i', // Format hex color
+                'regex:/^#[0-9A-F]{6}$/i',
             ],
 
             // Configuration
@@ -120,7 +138,6 @@ class StoreCategoryRequest extends FormRequest
     {
         return [
             'parent_id.exists' => 'La catégorie parente sélectionnée n\'existe pas.',
-            'name.required' => 'Le nom de la catégorie est obligatoire.',
             'name.min' => 'Le nom doit contenir au moins 2 caractères.',
             'name.max' => 'Le nom ne peut pas dépasser 100 caractères.',
             'description.max' => 'La description ne peut pas dépasser 2000 caractères.',
@@ -131,19 +148,5 @@ class StoreCategoryRequest extends FormRequest
             'sort_order.min' => 'L\'ordre ne peut pas être négatif.',
             'sort_order.max' => 'L\'ordre ne peut pas dépasser 9999.',
         ];
-    }
-
-    /**
-     * Prépare les données avant validation
-     */
-    protected function prepareForValidation(): void
-    {
-        // Valeurs par défaut
-        $this->merge([
-            'is_active' => $this->boolean('is_active', true),
-            'is_visible_in_menu' => $this->boolean('is_visible_in_menu', true),
-            'is_featured' => $this->boolean('is_featured', false),
-            'sort_order' => $this->integer('sort_order', 0),
-        ]);
     }
 }

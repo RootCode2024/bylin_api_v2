@@ -3,8 +3,10 @@
 namespace App\Providers;
 
 use Modules\Catalogue\Models\Brand;
+use Modules\Catalogue\Models\Category;
 use Illuminate\Support\ServiceProvider;
 use Modules\Catalogue\Observers\BrandObserver;
+use Modules\Catalogue\Observers\CategoryObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -22,5 +24,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Brand::observe(BrandObserver::class);
+        Category::observe(CategoryObserver::class);
     }
 }

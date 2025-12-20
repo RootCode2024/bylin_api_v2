@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Modules\Order\Models\Order;
 use Illuminate\Http\JsonResponse;
 use Modules\Catalogue\Models\Brand;
+use Modules\Catalogue\Models\Category;
 use Modules\Reviews\Models\Review;
 use Modules\Catalogue\Models\Product;
 use Modules\Customer\Models\Customer;
@@ -21,6 +22,7 @@ class DashboardController extends ApiController
             'orders' => Order::whereIn('status', ['pending', 'processing'])->count(),
             'products' => Product::count(),
             'brands' => Brand::count(),
+            'categories' => Category::count(),
             'reviews' => Review::where('status', 'pending')->count(),
         ];
 
