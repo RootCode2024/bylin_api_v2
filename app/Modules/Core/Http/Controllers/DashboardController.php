@@ -13,6 +13,7 @@ use Modules\Catalogue\Models\Category;
 use Modules\Reviews\Models\Review;
 use Modules\Catalogue\Models\Product;
 use Modules\Customer\Models\Customer;
+use Modules\Promotion\Models\Promotion;
 
 class DashboardController extends ApiController
 {
@@ -25,6 +26,7 @@ class DashboardController extends ApiController
             'brands' => Brand::count(),
             'categories' => Category::count(),
             'attributes' => Attribute::count(),
+            'promotions' => Promotion::count(),
             'reviews' => Review::where('status', 'pending')->count(),
         ];
 
