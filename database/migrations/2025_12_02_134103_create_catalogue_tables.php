@@ -121,11 +121,13 @@ return new class extends Migration
 
             $table->string('status')->default('draft');
             $table->boolean('is_featured')->default(false);
+            $table->boolean('is_new')->default(false);
+            $table->boolean('is_on_sale')->default(false);
+            $table->boolean('is_variable')->default(false);
             $table->boolean('track_inventory')->default(true);
             $table->integer('stock_quantity')->default(0);
             $table->integer('low_stock_threshold')->default(10);
 
-            $table->boolean('is_active')->default(true);
             $table->string('barcode')->nullable();
             $table->decimal('weight', 8, 2)->nullable();
             $table->json('dimensions')->nullable();
@@ -149,7 +151,6 @@ return new class extends Migration
             $table->index('is_featured');
             $table->index('brand_id');
             $table->index('price');
-            $table->index('is_active');
         });
 
         /*
@@ -209,7 +210,9 @@ return new class extends Migration
             $table->string('variation_name');
             $table->decimal('price', 12, 2);
             $table->decimal('compare_price', 12, 2)->nullable();
+            $table->decimal('cost_price', 12, 2)->nullable();
             $table->integer('stock_quantity')->default(0);
+            $table->string('stock_status')->default('in_stock');
             $table->string('barcode')->nullable();
             $table->boolean('is_active')->default(true);
             $table->json('attributes');

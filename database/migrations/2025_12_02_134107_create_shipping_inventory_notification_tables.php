@@ -58,6 +58,7 @@ return new class extends Migration
             $table->string('type'); // in, out, adjustment
             $table->string('reason'); // purchase, sale, return, adjustment, damaged
             $table->integer('quantity'); // Negative for out
+            $table->integer('quantity_changed')->nullable();
             $table->integer('quantity_before');
             $table->integer('quantity_after');
             $table->uuid('reference_id')->nullable(); // Order ID, etc.

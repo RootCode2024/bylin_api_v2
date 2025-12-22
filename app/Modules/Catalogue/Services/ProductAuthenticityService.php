@@ -13,7 +13,7 @@ use Modules\Core\Services\BaseService;
 
 /**
  * Product Authenticity Service
- * 
+ *
  * Handles QR code generation and verification for Bylin brand products
  */
 class ProductAuthenticityService extends BaseService
@@ -31,7 +31,7 @@ class ProductAuthenticityService extends BaseService
 
             for ($i = 0; $i < $quantity; $i++) {
                 $qrCode = $this->generateUniqueQRCode();
-                $serialNumber = $serialPrefix 
+                $serialNumber = $serialPrefix
                     ? $serialPrefix . '-' . strtoupper(Str::random(8))
                     : strtoupper(Str::random(12));
 
@@ -71,7 +71,7 @@ class ProductAuthenticityService extends BaseService
             if (!$authenticityCode) {
                 // Log fake scan
                 $this->logScan(null, $qrCode, 'fake', $scanData);
-                
+
                 return [
                     'success' => false,
                     'status' => 'fake',
@@ -81,12 +81,12 @@ class ProductAuthenticityService extends BaseService
             }
 
             $verificationStatus = $authenticityCode->getVerificationStatus();
-            
+
             // Activate if first scan
             if (!$authenticityCode->is_activated && $authenticityCode->is_authentic) {
                 $customerId = $scanData['customer_id'] ?? null;
                 $authenticityCode->activate($customerId);
-                
+
                 $this->logInfo('Product activated via QR scan', [
                     'qr_code' => $qrCode,
                     'product_id' => $authenticityCode->product_id,

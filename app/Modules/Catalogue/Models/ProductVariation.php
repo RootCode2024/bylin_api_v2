@@ -13,8 +13,15 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string $id
  * @property string $product_id
  * @property string $sku
+ * @property string $variation_name
  * @property float $price
+ * @property float|null $compare_price
+ * @property float|null $cost_price
  * @property int $stock_quantity
+ * @property string $stock_status
+ * @property string|null $barcode
+ * @property bool $is_active
+ * @property array $attributes
  */
 class ProductVariation extends BaseModel
 {
@@ -26,7 +33,9 @@ class ProductVariation extends BaseModel
         'variation_name',
         'price',
         'compare_price',
+        'cost_price',
         'stock_quantity',
+        'stock_status',
         'barcode',
         'is_active',
         'attributes',
@@ -37,6 +46,7 @@ class ProductVariation extends BaseModel
         return [
             'price' => 'decimal:2',
             'compare_price' => 'decimal:2',
+            'cost_price' => 'decimal:2',
             'stock_quantity' => 'integer',
             'is_active' => 'boolean',
             'attributes' => 'array',
@@ -59,7 +69,9 @@ class ProductVariation extends BaseModel
      */
     public function isInStock(): bool
     {
-        return $this->is_active && $this->stock_quantity > 0;
+        return $this->is_active
+            && $this->stock_quantity > 0
+            && $this->stock_status === 'in_stock';
     }
 
     /**
@@ -86,6 +98,21 @@ class ProductVariation extends BaseModel
      */
     public function scopeInStock($query)
     {
-        return $query->where('stock_quantity', '>', 0);
+        return $query->where('stock_quantity', '>', 0)
+            ->where('stock_status', 'in_stock');
+    }
+
+    /**
+     * Update stock status based on quantity
+     */
+    public function updateStockStatus(): void
+    {
+        if ($this->stock_quantity <= 0) {
+            $this->stock_status = 'out_of_stock';
+        } elseif ($this->stock_quantity > 0 && $this->stock_status === 'out_of_stock') {
+            $this->stock_status = 'in_stock';
+        }
+
+        $this->saveQuietly();
     }
 }

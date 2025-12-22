@@ -32,7 +32,7 @@ return new class extends Migration
             $table->foreign('product_id')->references('id')->on('products')->onDelete('cascade');
             $table->foreign('purchased_by')->references('id')->on('customers')->onDelete('set null');
             $table->foreign('order_id')->references('id')->on('orders')->onDelete('set null');
-            
+
             $table->index('qr_code');
             $table->index('serial_number');
             $table->index('product_id');
@@ -42,6 +42,8 @@ return new class extends Migration
         // Add flag to products table to identify Bylin brand products
         Schema::table('products', function (Blueprint $table) {
             $table->boolean('requires_authenticity')->default(false)->after('is_preorder_enabled');
+            $table->integer('authenticity_codes_count')->default(0)->after('requires_authenticity');
+            
             $table->index('requires_authenticity');
         });
 
@@ -71,12 +73,12 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('authenticity_scan_logs');
-        
+
         Schema::table('products', function (Blueprint $table) {
             $table->dropIndex(['requires_authenticity']);
             $table->dropColumn('requires_authenticity');
         });
-        
+
         Schema::dropIfExists('product_authenticity_codes');
     }
 };

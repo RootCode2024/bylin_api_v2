@@ -6,34 +6,44 @@ namespace Modules\Catalogue\Services;
 
 use Carbon\Carbon;
 use Modules\Catalogue\Models\Product;
+use Modules\Catalogue\Events\PreorderEnabled;
+use Modules\Catalogue\Events\PreorderDisabled;
 use Modules\Core\Exceptions\BusinessException;
 use Modules\Core\Services\BaseService;
 
 /**
  * Preorder Service
- * 
+ *
  * Handles business logic for product preorders and automatic activation
+ *
+ * ✅ NOMS UNIFORMISÉS :
+ * - is_preorder_enabled (précommande activée)
+ * - preorder_auto_enabled (activation automatique)
+ * - preorder_available_date (date de disponibilité)
  */
 class PreorderService extends BaseService
 {
     /**
-     * Enable preorder for a product
+     * Enable preorder for a product (MANUAL)
      */
     public function enablePreorder(
         string $productId,
         ?Carbon $availableDate = null,
         ?int $limit = null,
+        ?string $message = null,
         ?string $terms = null
     ): Product {
-        return $this->transaction(function () use ($productId, $availableDate, $limit, $terms) {
+        return $this->transaction(function () use ($productId, $availableDate, $limit, $message, $terms) {
             $product = Product::findOrFail($productId);
 
             $product->update([
                 'is_preorder_enabled' => true,
-                'is_preorder_auto' => false, // Manual activation
+                'preorder_auto_enabled' => false, // Manual activation
                 'preorder_available_date' => $availableDate,
                 'preorder_limit' => $limit,
+                'preorder_message' => $message,
                 'preorder_terms' => $terms,
+                'preorder_enabled_at' => now(),
             ]);
 
             $this->logInfo('Preorder enabled manually', [
@@ -42,7 +52,12 @@ class PreorderService extends BaseService
             ]);
 
             // Dispatch event
-            event(new \Modules\Catalogue\Events\PreorderEnabled($product));
+            event(new PreorderEnabled(
+                product: $product,
+                isAutomatic: false,
+                availabilityDate: $availableDate,
+                reason: 'manual'
+            ));
 
             return $product->fresh();
         });
@@ -51,25 +66,34 @@ class PreorderService extends BaseService
     /**
      * Disable preorder for a product
      */
-    public function disablePreorder(string $productId): Product
+    public function disablePreorder(string $productId, string $reason = 'manual'): Product
     {
-        return $this->transaction(function () use ($productId) {
+        return $this->transaction(function () use ($productId, $reason) {
             $product = Product::findOrFail($productId);
 
             if (!$product->is_preorder_enabled) {
                 throw new BusinessException('Preorder is not enabled for this product');
             }
 
+            $wasAutomatic = $product->preorder_auto_enabled;
+
             $product->update([
                 'is_preorder_enabled' => false,
-                'is_preorder_auto' => false,
+                'preorder_auto_enabled' => false,
                 'preorder_available_date' => null,
             ]);
 
             $this->logInfo('Preorder disabled', [
                 'product_id' => $productId,
                 'preorder_count' => $product->preorder_count,
+                'was_automatic' => $wasAutomatic,
             ]);
+
+            event(new PreorderDisabled(
+                product: $product,
+                isAutomatic: $wasAutomatic,
+                reason: $reason
+            ));
 
             return $product->fresh();
         });
@@ -83,7 +107,7 @@ class PreorderService extends BaseService
         $product = Product::findOrFail($productId);
 
         // Skip if preorder auto is disabled globally
-        if (!config('ecommerce.preorder.auto_enable_on_out_of_stock', true)) {
+        if (!config('catalogue.preorder.auto_enable_on_out_of_stock', true)) {
             return false;
         }
 
@@ -102,18 +126,18 @@ class PreorderService extends BaseService
     }
 
     /**
-     * Enable automatic preorder
+     * Enable automatic preorder (called by Observer)
      */
-    protected function enableAutoPreorder(Product $product): void
+    public function enableAutoPreorder(Product $product): void
     {
-        $defaultWaitDays = config('ecommerce.preorder.default_wait_period_days', 30);
+        $defaultWaitDays = config('catalogue.preorder.default_wait_period_days', 30);
         $availableDate = now()->addDays($defaultWaitDays);
 
         $product->update([
             'is_preorder_enabled' => true,
-            'is_preorder_auto' => true,
+            'preorder_auto_enabled' => true, // ✅ UNIFORMISÉ
             'preorder_available_date' => $availableDate,
-            'status' => 'out_of_stock', // Optional: change status
+            'preorder_enabled_at' => now(),
         ]);
 
         $this->logInfo('Auto preorder enabled', [
@@ -122,56 +146,36 @@ class PreorderService extends BaseService
             'available_date' => $availableDate->toDateString(),
         ]);
 
-        event(new \Modules\Catalogue\Events\PreorderEnabled($product));
-    }
-
-    /**
-     * Update stock and check if preorder should be disabled
-     */
-    public function updateStockAndCheckPreorder(string $productId, int $newStock): Product
-    {
-        return $this->transaction(function () use ($productId, $newStock) {
-            $product = Product::findOrFail($productId);
-            $oldStock = $product->stock_quantity;
-
-            // Update stock
-            $product->update(['stock_quantity' => $newStock]);
-
-            // If stock was 0 and now > 0, check auto preorder
-            if ($oldStock === 0 && $newStock === 0) {
-                $this->checkAutoPreorder($productId);
-            }
-            // If stock becomes > 0 and auto preorder was enabled, disable it
-            elseif ($newStock > 0 && $product->is_preorder_auto) {
-                $this->disableAutoPreorder($product);
-            }
-
-            return $product->fresh();
-        });
+        event(new PreorderEnabled(
+            product: $product,
+            isAutomatic: true,
+            availabilityDate: $availableDate,
+            reason: 'out_of_stock'
+        ));
     }
 
     /**
      * Disable automatic preorder when stock returns
      */
-    protected function disableAutoPreorder(Product $product): void
+    public function disableAutoPreorder(Product $product): void
     {
         $product->update([
             'is_preorder_enabled' => false,
-            'is_preorder_auto' => false,
+            'preorder_auto_enabled' => false, // ✅ UNIFORMISÉ
             'preorder_available_date' => null,
-            'status' => 'active', // Reactivate product
         ]);
-
-        // Notify preorder customers
-        if ($product->preorder_count > 0) {
-            event(new \Modules\Catalogue\Events\PreorderAvailable($product));
-        }
 
         $this->logInfo('Auto preorder disabled - stock available', [
             'product_id' => $product->id,
             'new_stock' => $product->stock_quantity,
             'preorder_count' => $product->preorder_count,
         ]);
+
+        event(new PreorderDisabled(
+            product: $product,
+            isAutomatic: true,
+            reason: 'back_in_stock'
+        ));
     }
 
     /**
@@ -215,14 +219,15 @@ class PreorderService extends BaseService
 
         return [
             'is_preorder_enabled' => $product->is_preorder_enabled,
-            'is_auto' => $product->is_preorder_auto,
+            'is_automatic' => $product->preorder_auto_enabled,
             'available_date' => $product->preorder_available_date?->toDateString(),
             'limit' => $product->preorder_limit,
             'current_count' => $product->preorder_count,
-            'spots_remaining' => $product->preorder_limit 
-                ? $product->preorder_limit - $product->preorder_count 
+            'spots_remaining' => $product->preorder_limit
+                ? $product->preorder_limit - $product->preorder_count
                 : null,
             'can_preorder' => $this->canPreorder($product),
+            'message' => $product->preorder_message,
             'terms' => $product->preorder_terms,
         ];
     }

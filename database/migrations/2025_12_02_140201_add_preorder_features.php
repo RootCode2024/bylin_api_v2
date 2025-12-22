@@ -14,12 +14,14 @@ return new class extends Migration
         // Extend products table for preorder functionality
         Schema::table('products', function (Blueprint $table) {
             $table->boolean('is_preorder_enabled')->default(false)->after('status');
-            $table->boolean('is_preorder_auto')->default(false)->after('is_preorder_enabled');
-            $table->date('preorder_available_date')->nullable()->after('is_preorder_auto');
-            $table->integer('preorder_limit')->nullable()->after('preorder_available_date');
-            $table->integer('preorder_count')->default(0)->after('preorder_limit');
-            $table->text('preorder_terms')->nullable()->after('preorder_count');
-            
+            $table->boolean('preorder_auto_enabled')->default(false)->after('is_preorder_enabled');
+            $table->dateTime('preorder_available_date')->nullable();
+            $table->integer('preorder_limit')->nullable();
+            $table->integer('preorder_count')->default(0);
+            $table->text('preorder_message')->nullable();
+            $table->text('preorder_terms')->nullable();
+            $table->dateTime('preorder_enabled_at')->nullable();
+
             $table->index('is_preorder_enabled');
             $table->index(['is_preorder_enabled', 'preorder_available_date']);
         });
@@ -29,7 +31,7 @@ return new class extends Migration
             $table->boolean('is_preorder')->default(false)->after('total');
             $table->date('expected_availability_date')->nullable()->after('is_preorder');
             $table->string('preorder_status')->nullable()->after('expected_availability_date');
-            
+
             $table->index('is_preorder');
             $table->index('preorder_status');
         });
@@ -51,11 +53,13 @@ return new class extends Migration
             $table->dropIndex(['is_preorder_enabled', 'preorder_available_date']);
             $table->dropColumn([
                 'is_preorder_enabled',
-                'is_preorder_auto',
+                'preorder_auto_enabled',
                 'preorder_available_date',
                 'preorder_limit',
                 'preorder_count',
                 'preorder_terms',
+                'preorder_message',
+                'preorder_enabled_at'
             ]);
         });
     }

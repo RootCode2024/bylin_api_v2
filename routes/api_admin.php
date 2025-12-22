@@ -39,6 +39,24 @@ Route::prefix('v1/admin')
 
     // Catalogue Management
     Route::apiResource('products', \Modules\Catalogue\Http\Controllers\Admin\ProductController::class);
+    Route::prefix('products')->name('products.')->group(function () {
+
+        // Simple product stock update
+        Route::post('{id}/stock', [\Modules\Catalogue\Http\Controllers\Admin\ProductController::class, 'updateStock'])
+            ->name('update-stock');
+
+        // Variation stock update
+        Route::post(
+            '{productId}/variations/{variationId}/stock',
+            [\Modules\Catalogue\Http\Controllers\Admin\ProductController::class, 'updateVariationStock']
+        )
+            ->name('variations.update-stock');
+
+        // Stock history
+        Route::get('{id}/stock-history', [\Modules\Catalogue\Http\Controllers\Admin\ProductController::class, 'stockHistory'])
+            ->name('stock-history');
+    });
+    
     Route::apiResource('categories', \Modules\Catalogue\Http\Controllers\Admin\CategoryController::class);
     Route::prefix('categories')->name('categories.')->group(function () {
 
@@ -167,12 +185,28 @@ Route::prefix('v1/admin')
     Route::apiResource('shipments', \Modules\Shipping\Http\Controllers\Admin\ShipmentController::class);
 
     // Inventory Management
-    Route::get('/inventory/low-stock', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'lowStock'])
-        ->name('inventory.low-stock');
-    Route::post('/inventory/adjust', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'adjust'])
-        ->name('inventory.adjust');
-    Route::get('/inventory/movements', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'movements'])
-        ->name('inventory.movements');
+    Route::prefix('inventory')->name('inventory.')->group(function () {
+
+        // Stock queries
+        Route::get('low-stock', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'lowStock'])
+            ->name('low-stock');
+        Route::get('out-of-stock', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'outOfStock'])
+            ->name('out-of-stock');
+        Route::get('movements', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'movements'])
+            ->name('movements');
+        Route::get('statistics', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'statistics'])
+            ->name('statistics');
+
+        // Stock adjustments
+        Route::post('adjust', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'adjust'])
+            ->name('adjust');
+        Route::post('bulk-adjust', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'bulkAdjust'])
+            ->name('bulk-adjust');
+
+        // Export
+        Route::post('export', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'export'])
+            ->name('export');
+    });
 
     // Dashboard & Analytics
     Route::get('/dashboard/stats', [\Modules\Core\Http\Controllers\DashboardController::class, 'stats'])
