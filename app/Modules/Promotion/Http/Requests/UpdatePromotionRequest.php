@@ -6,14 +6,14 @@ namespace Modules\Promotion\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class StorePromotionRequest extends FormRequest
+class UpdatePromotionRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
-        return true; // Authorization handled by admin middleware
+        return true;
     }
 
     /**
@@ -22,18 +22,18 @@ class StorePromotionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'required|string|max:255',
-            'code' => 'required|string|max:50|unique:promotions,code',
+            'name' => 'sometimes|string|max:255',
+            'code' => 'sometimes|string|max:50|unique:promotions,code,' . $this->route('promotion'),
             'description' => 'nullable|string|max:1000',
-            'type' => 'required|in:percentage,fixed_amount,buy_x_get_y,free_shipping',
-            'value' => 'required|numeric|min:0',
+            'type' => 'sometimes|in:percentage,fixed_amount,buy_x_get_y,free_shipping',
+            'value' => 'sometimes|numeric|min:0',
             'min_purchase_amount' => 'nullable|numeric|min:0',
             'max_discount_amount' => 'nullable|numeric|min:0',
             'usage_limit' => 'nullable|integer|min:1',
             'usage_limit_per_customer' => 'nullable|integer|min:1',
-            'starts_at' => 'nullable|date',
-            'expires_at' => 'nullable|date|after:starts_at',
-            'is_active' => 'boolean',
+            'starts_at' => 'sometimes|date',
+            'expires_at' => 'sometimes|date|after_or_equal:starts_at',
+            'is_active' => 'sometimes|boolean',
             'applicable_products' => 'nullable|array',
             'applicable_categories' => 'nullable|array',
             'metadata' => 'nullable|array',
@@ -46,10 +46,9 @@ class StorePromotionRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required' => 'Le nom de la promotion est obligatoire.',
             'code.unique' => 'Ce code de promotion est déjà utilisé.',
-            'expires_at.after' => 'La date d\'expiration doit être postérieure à la date de début.',
-            'type.in' => 'Le type de promotion doit être : percentage, fixed_amount, buy_x_get_y ou free_shipping.',
+            'expires_at.after_or_equal' => 'La date d\'expiration doit être égale ou postérieure à la date de début.',
+            'type.in' => 'Type de promotion invalide.',
         ];
     }
 }

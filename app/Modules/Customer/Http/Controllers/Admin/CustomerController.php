@@ -14,6 +14,12 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Modules\Customer\Http\Requests\StoreCustomerAdminRequest;
+use Modules\Customer\Http\Requests\UpdateCustomerAdminRequest;
+use Modules\Customer\Http\Requests\BulkUpdateCustomerStatusRequest;
+use Modules\Customer\Http\Requests\BulkDeleteCustomersRequest;
+use Modules\Customer\Http\Requests\BulkRestoreCustomersRequest;
+use Modules\Customer\Http\Requests\BulkForceDeleteCustomersRequest;
 
 class CustomerController extends ApiController
 {
@@ -55,26 +61,18 @@ class CustomerController extends ApiController
     /**
      * Store a newly created customer
      */
-    public function store(Request $request): JsonResponse
+    /**
+     * Store a newly created customer
+     */
+    public function store(StoreCustomerAdminRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'unique:customers,email'],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'date_of_birth' => ['nullable', 'date', 'before:today'],
-            'gender' => ['nullable', 'in:male,female,other'],
-            'status' => ['nullable', 'in:active,inactive,suspended'],
-            'send_credentials' => ['nullable', 'boolean'],
-        ]);
-
         // Générer un mot de passe temporaire
         $temporaryPassword = Str::random(16);
 
         $customer = Customer::create([
-            ...$validated,
+            ...$request->validated(),
             'password' => Hash::make($temporaryPassword),
-            'status' => $validated['status'] ?? 'active',
+            'status' => $request->status ?? 'active',
             'preferences' => [],
         ]);
 
@@ -83,29 +81,21 @@ class CustomerController extends ApiController
         //     Mail::to($customer->email)->send(new CustomerCredentials($customer, $temporaryPassword));
         // }
 
-        return $this->createdResponse($customer, 'Customer created successfully.');
+        return $this->createdResponse($customer, 'Client créé avec succès.');
     }
 
     /**
      * Update customer information
      */
-    public function update(Request $request, string $id): JsonResponse
+    /**
+     * Update customer information
+     */
+    public function update(UpdateCustomerAdminRequest $request, string $id): JsonResponse
     {
         $customer = Customer::findOrFail($id);
+        $customer->update($request->validated());
 
-        $validated = $request->validate([
-            'first_name' => ['sometimes', 'string', 'max:255'],
-            'last_name' => ['sometimes', 'string', 'max:255'],
-            'email' => ['sometimes', 'email', Rule::unique('customers')->ignore($customer->id)],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'date_of_birth' => ['nullable', 'date', 'before:today'],
-            'gender' => ['nullable', 'in:male,female,other'],
-            'preferences' => ['nullable', 'array'],
-        ]);
-
-        $customer->update($validated);
-
-        return $this->successResponse($customer, 'Customer updated successfully.');
+        return $this->successResponse($customer, 'Informations du client mises à jour avec succès.');
     }
 
     /**
@@ -144,18 +134,15 @@ class CustomerController extends ApiController
     /**
      * Bulk update customer status
      */
-    public function bulkUpdateStatus(Request $request): JsonResponse
+    /**
+     * Bulk update customer status
+     */
+    public function bulkUpdateStatus(BulkUpdateCustomerStatusRequest $request): JsonResponse
     {
-        $request->validate([
-            'ids' => ['required', 'array'],
-            'ids.*' => ['exists:customers,id'],
-            'status' => ['required', 'in:active,inactive,suspended'],
-        ]);
-
         Customer::whereIn('id', $request->ids)
             ->update(['status' => $request->status]);
 
-        return $this->successResponse(null, 'Customer status updated successfully.');
+        return $this->successResponse(null, 'Statuts des clients mis à jour avec succès.');
     }
 
     /**
@@ -166,22 +153,17 @@ class CustomerController extends ApiController
         $customer = Customer::findOrFail($id);
         $customer->delete();
 
-        return $this->deletedResponse('Customer deleted successfully.');
+        return $this->deletedResponse('Client supprimé avec succès.');
     }
 
     /**
      * Bulk soft delete customers
      */
-    public function bulkDestroy(Request $request): JsonResponse
+    public function bulkDestroy(BulkDeleteCustomersRequest $request): JsonResponse
     {
-        $request->validate([
-            'ids' => ['required', 'array'],
-            'ids.*' => ['exists:customers,id']
-        ]);
-
         Customer::whereIn('id', $request->ids)->delete();
 
-        return $this->deletedResponse('Selected customers deleted successfully.');
+        return $this->deletedResponse('Clients sélectionnés supprimés avec succès.');
     }
 
     /**
@@ -192,24 +174,19 @@ class CustomerController extends ApiController
         $customer = Customer::onlyTrashed()->findOrFail($id);
         $customer->restore();
 
-        return $this->successResponse($customer, 'Customer restored successfully.');
+        return $this->successResponse($customer, 'Client restauré avec succès.');
     }
 
     /**
      * Bulk restore customers
      */
-    public function bulkRestore(Request $request): JsonResponse
+    public function bulkRestore(BulkRestoreCustomersRequest $request): JsonResponse
     {
-        $request->validate([
-            'ids' => ['required', 'array'],
-            'ids.*' => ['exists:customers,id']
-        ]);
-
         Customer::onlyTrashed()
             ->whereIn('id', $request->ids)
             ->restore();
 
-        return $this->successResponse(null, 'Selected customers restored successfully.');
+        return $this->successResponse(null, 'Clients sélectionnés restaurés avec succès.');
     }
 
     /**
@@ -220,24 +197,19 @@ class CustomerController extends ApiController
         $customer = Customer::withTrashed()->findOrFail($id);
         $customer->forceDelete();
 
-        return $this->deletedResponse('Customer permanently deleted.');
+        return $this->deletedResponse('Client supprimé définitivement.');
     }
 
     /**
      * Bulk force delete customers
      */
-    public function bulkForceDelete(Request $request): JsonResponse
+    public function bulkForceDelete(BulkForceDeleteCustomersRequest $request): JsonResponse
     {
-        $request->validate([
-            'ids' => ['required', 'array'],
-            'ids.*' => ['exists:customers,id']
-        ]);
-
         Customer::withTrashed()
             ->whereIn('id', $request->ids)
             ->forceDelete();
 
-        return $this->deletedResponse('Selected customers permanently deleted.');
+        return $this->deletedResponse('Clients sélectionnés supprimés définitivement.');
     }
 
     /**

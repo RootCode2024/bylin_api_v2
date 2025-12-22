@@ -8,6 +8,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Core\Http\Controllers\ApiController;
 use Modules\Promotion\Models\Promotion;
+use Modules\Promotion\Http\Requests\StorePromotionRequest;
+use Modules\Promotion\Http\Requests\UpdatePromotionRequest;
 
 class PromotionController extends ApiController
 {
@@ -30,28 +32,13 @@ class PromotionController extends ApiController
     /**
      * Create promotion
      */
-    public function store(Request $request): JsonResponse
+    public function store(StorePromotionRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'code' => 'required|string|unique:promotions,code|max:50',
-            'description' => 'nullable|string',
-            'type' => 'required|in:percentage,fixed_amount',
-            'value' => 'required|numeric|min:0',
-            'min_purchase_amount' => 'nullable|numeric|min:0',
-            'max_discount_amount' => 'nullable|numeric|min:0',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
-            'usage_limit' => 'nullable|integer|min:1',
-            'usage_limit_per_user' => 'nullable|integer|min:1',
-            'is_active' => 'boolean',
-            'applicable_products' => 'nullable|array',
-            'applicable_categories' => 'nullable|array',
-        ]);
+        $validated = $request->validated();
 
         $promotion = Promotion::create($validated);
 
-        return $this->createdResponse($promotion, 'Promotion created successfully');
+        return $this->createdResponse($promotion, 'Promotion créée avec succès');
     }
 
     /**
@@ -66,30 +53,15 @@ class PromotionController extends ApiController
     /**
      * Update promotion
      */
-    public function update(string $id, Request $request): JsonResponse
+    public function update(string $id, UpdatePromotionRequest $request): JsonResponse
     {
         $promotion = Promotion::findOrFail($id);
 
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'code' => 'sometimes|required|string|max:50|unique:promotions,code,' . $id,
-            'description' => 'nullable|string',
-            'type' => 'sometimes|required|in:percentage,fixed_amount',
-            'value' => 'sometimes|required|numeric|min:0',
-            'min_purchase_amount' => 'nullable|numeric|min:0',
-            'max_discount_amount' => 'nullable|numeric|min:0',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
-            'usage_limit' => 'nullable|integer|min:1',
-            'usage_limit_per_user' => 'nullable|integer|min:1',
-            'is_active' => 'boolean',
-            'applicable_products' => 'nullable|array',
-            'applicable_categories' => 'nullable|array',
-        ]);
+        $validated = $request->validated();
 
         $promotion->update($validated);
 
-        return $this->successResponse($promotion, 'Promotion updated successfully');
+        return $this->successResponse($promotion, 'Promotion mise à jour avec succès');
     }
 
     /**

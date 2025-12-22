@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Modules\Core\Http\Controllers\ApiController;
 use Modules\Payment\Models\Payment;
 use Modules\Payment\Models\Refund;
+use Modules\Payment\Http\Requests\RefundPaymentRequest;
+
 
 class PaymentController extends ApiController
 {
@@ -44,17 +46,12 @@ class PaymentController extends ApiController
     /**
      * Process Refund (Mock)
      */
-    public function refund(string $id, Request $request): JsonResponse
+    public function refund(string $id, RefundPaymentRequest $request): JsonResponse
     {
-        $request->validate([
-            'amount' => 'required|numeric|min:0',
-            'reason' => 'required|string',
-        ]);
-
         $payment = Payment::findOrFail($id);
 
         if ($payment->status !== Payment::STATUS_COMPLETED) {
-            return $this->errorResponse('Only completed payments can be refunded', 400);
+            return $this->errorResponse('Seuls les paiements complétés peuvent être remboursés', 400);
         }
 
         // Logic to process refund via Gateway would go here
@@ -68,6 +65,6 @@ class PaymentController extends ApiController
             'created_by' => auth()->id(),
         ]);
 
-        return $this->successResponse($refund, 'Refund processed successfully');
+        return $this->successResponse($refund, 'Remboursement traité avec succès');
     }
 }

@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Modules\Core\Http\Controllers\ApiController;
 use Modules\Order\Models\Order;
 use Modules\Order\Services\OrderService;
+use Modules\Order\Http\Requests\UpdateOrderStatusRequest;
+use Modules\Order\Http\Requests\CancelOrderAdminRequest;
 
 class OrderController extends ApiController
 {
@@ -72,13 +74,8 @@ class OrderController extends ApiController
     /**
      * Update order status
      */
-    public function updateStatus(string $id, Request $request): JsonResponse
+    public function updateStatus(string $id, UpdateOrderStatusRequest $request): JsonResponse
     {
-        $request->validate([
-            'status' => 'required|string',
-            'note' => 'nullable|string',
-        ]);
-
         $order = Order::findOrFail($id);
 
         try {
@@ -92,18 +89,14 @@ class OrderController extends ApiController
             return $this->errorResponse($e->getMessage(), 422);
         }
 
-        return $this->successResponse($order, 'Order status updated');
+        return $this->successResponse($order, 'Statut de la commande mis à jour');
     }
 
     /**
      * Cancel order
      */
-    public function cancel(string $id, Request $request): JsonResponse
+    public function cancel(string $id, CancelOrderAdminRequest $request): JsonResponse
     {
-        $request->validate([
-            'reason' => 'required|string',
-        ]);
-
         $order = Order::findOrFail($id);
 
         try {
@@ -116,6 +109,6 @@ class OrderController extends ApiController
             return $this->errorResponse($e->getMessage(), 422);
         }
 
-        return $this->successResponse($order, 'Order cancelled');
+        return $this->successResponse($order, 'Commande annulée avec succès');
     }
 }
