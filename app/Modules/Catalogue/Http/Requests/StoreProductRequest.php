@@ -2,8 +2,9 @@
 
 namespace Modules\Catalogue\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Modules\Catalogue\Models\Brand;
+use Illuminate\Foundation\Http\FormRequest;
 
 class StoreProductRequest extends FormRequest
 {
@@ -14,7 +15,7 @@ class StoreProductRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
+        $rules = [
             // Informations de base
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
@@ -73,6 +74,15 @@ class StoreProductRequest extends FormRequest
             'images' => ['nullable', 'array', 'max:10'],
             'images.*' => ['image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
         ];
+
+        if ($this->isBylinProduct()) {
+            $rules['collection_id'] = ['required', 'uuid', 'exists:collections,id'];
+            // requires_authenticity sera automatiquement à true via l'Observer
+        } else {
+            $rules['collection_id'] = ['prohibited']; // Interdit pour non-Bylin
+        }
+
+        return $rules;
     }
 
     public function messages(): array
@@ -83,6 +93,11 @@ class StoreProductRequest extends FormRequest
             'price.min' => 'Le prix doit être positif.',
             'compare_price.gt' => 'Le prix comparatif doit être supérieur au prix de vente.',
             'preorder_available_date.after' => 'La date de disponibilité doit être dans le futur.',
+
+            'collection_id.required' => 'Les produits de la marque Bylin doivent appartenir à une collection.',
+            'collection_id.exists' => 'Cette collection n\'existe pas.',
+            'collection_id.prohibited' => 'Seuls les produits Bylin peuvent avoir une collection.',
+
             'images.*.image' => 'Le fichier doit être une image.',
             'images.*.max' => 'L\'image ne doit pas dépasser 5Mo.',
         ];
@@ -99,6 +114,31 @@ class StoreProductRequest extends FormRequest
             'is_variable' => $this->boolean('is_variable', false),
             'requires_authenticity' => $this->boolean('requires_authenticity', false),
         ]);
+    }
+
+    /**
+     * Check if this product is for Bylin brand
+     */
+    protected function isBylinProduct(): bool
+    {
+        if (!$this->has('brand_id')) {
+            return false;
+        }
+
+        $brand = Brand::find($this->input('brand_id'));
+
+        return $brand && $brand->is_bylin_brand;
+    }
+
+    /**
+     * Handle a passed validation attempt.
+     */
+    protected function passedValidation(): void
+    {
+        // Si c'est un produit Bylin, s'assurer que requires_authenticity est true
+        if ($this->isBylinProduct()) {
+            $this->merge(['requires_authenticity' => true]);
+        }
     }
 
     public function validated($key = null, $default = null)
@@ -122,6 +162,24 @@ class StoreProductRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
+
+            if ($this->has('collection_id') && !$this->isBylinProduct()) {
+                $validator->errors()->add(
+                    'collection_id',
+                    'Seuls les produits de la marque Bylin peuvent appartenir à une collection.'
+                );
+            }
+
+            // Validation : prix comparatif cohérent
+            if ($this->has('compare_price') && $this->has('price')) {
+                if ($this->input('compare_price') <= $this->input('price')) {
+                    $validator->errors()->add(
+                        'compare_price',
+                        'Le prix comparatif doit être supérieur au prix de vente pour indiquer une réduction.'
+                    );
+                }
+            }
+            
             // Précommande manuelle impossible avec du stock
             if ($this->is_preorder_enabled && $this->stock_quantity > 0) {
                 $validator->errors()->add(

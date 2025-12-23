@@ -6,10 +6,11 @@ namespace Modules\Catalogue\Services;
 
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Modules\Catalogue\Models\Product;
 use Modules\Core\Services\BaseService;
-use Modules\Catalogue\Models\ProductVariation;
 use Modules\Inventory\Models\StockMovement;
+use Modules\Catalogue\Models\ProductVariation;
 
 /**
  * Product Service
@@ -408,7 +409,7 @@ class ProductService extends BaseService
             'quantity_changed' => $quantityChanged,
             'type' => $type,
             'notes' => $notes,
-            'user_id' => auth()->id(),
+            'user_id' => Auth::id(),
         ]);
     }
 
@@ -482,7 +483,7 @@ class ProductService extends BaseService
                 'reason' => $movementReason,
                 'quantity' => $finalQuantity - $currentStock,
                 'notes' => $notes,
-                'created_by' => auth()->id(),
+                'created_by' => Auth::id(),
             ]);
 
             return [
@@ -544,7 +545,7 @@ class ProductService extends BaseService
                 'reason' => $movementReason,
                 'quantity' => $finalQuantity - $currentStock,
                 'notes' => $notes,
-                'created_by' => auth()->id(),
+                'created_by' => Auth::id(),
             ]);
 
             return [

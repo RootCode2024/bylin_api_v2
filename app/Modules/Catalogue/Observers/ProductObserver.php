@@ -21,6 +21,7 @@ use Illuminate\Support\Str;
  * - Génération automatique du slug
  * - Gestion automatique de la précommande selon le stock
  * - Changement automatique du statut
+ * - Validation automatique des produits Bylin (collection + authenticité)
  * - Dispatch des events appropriés
  */
 class ProductObserver
@@ -33,6 +34,9 @@ class ProductObserver
         $product->slug = $this->generateUniqueSlug($product->name);
         $product->sku = $this->generateUniqueSku();
         $product->barcode = $this->generateUniqueBarcode();
+
+        // ✅ VALIDATION BYLIN - Si c'est un produit de la marque Bylin
+        $this->enforceBylinRules($product);
 
         // Définir le statut initial selon le stock
         if ($product->stock_quantity === 0) {
@@ -57,6 +61,16 @@ class ProductObserver
      */
     public function updating(Product $product): void
     {
+        // ✅ VALIDATION BYLIN - Vérifier si la marque a changé
+        if ($product->isDirty('brand_id')) {
+            $this->enforceBylinRules($product);
+        }
+
+        // ✅ VALIDATION - Si collection_id est supprimé sur un produit Bylin
+        if ($product->isDirty('collection_id')) {
+            $this->validateCollectionRemoval($product);
+        }
+
         // Vérifier si le stock a changé
         if ($product->isDirty('stock_quantity')) {
             $this->handleStockChange($product);
@@ -79,6 +93,61 @@ class ProductObserver
     public function updated(Product $product): void
     {
         // Les events sont déjà dispatched dans handleStockChange et handleStatusChange
+    }
+
+    /**
+     * ✅ NOUVEAU - Force les règles pour les produits Bylin
+     */
+    protected function enforceBylinRules(Product $product): void
+    {
+        // Charger la relation brand si pas déjà chargée
+        if (!$product->relationLoaded('brand') && $product->brand_id) {
+            $product->load('brand');
+        }
+
+        // Si c'est un produit Bylin
+        if ($product->brand && $product->brand->is_bylin_brand) {
+
+            // 1. collection_id devient OBLIGATOIRE
+            if (empty($product->collection_id)) {
+                throw new \InvalidArgumentException(
+                    'Les produits de la marque Bylin doivent appartenir à une collection. Veuillez sélectionner une collection.'
+                );
+            }
+
+            // 2. requires_authenticity devient automatiquement TRUE
+            $product->requires_authenticity = true;
+
+            // 3. Message informatif (log ou notification)
+            if (!$product->exists) {
+                logger()->info("Produit Bylin créé : {$product->name} - Authenticité activée automatiquement");
+            }
+        } else {
+            // Si ce n'est PAS un produit Bylin
+            // Optionnel : empêcher d'avoir une collection
+            if (!empty($product->collection_id)) {
+                throw new \InvalidArgumentException(
+                    'Seuls les produits de la marque Bylin peuvent appartenir à une collection.'
+                );
+            }
+        }
+    }
+
+    /**
+     * ✅ NOUVEAU - Valide la suppression de collection_id
+     */
+    protected function validateCollectionRemoval(Product $product): void
+    {
+        // Si on essaie de retirer la collection d'un produit Bylin
+        if (!$product->relationLoaded('brand') && $product->brand_id) {
+            $product->load('brand');
+        }
+
+        if ($product->brand && $product->brand->is_bylin_brand && empty($product->collection_id)) {
+            throw new \InvalidArgumentException(
+                'Vous ne pouvez pas retirer la collection d\'un produit Bylin. La collection est obligatoire.'
+            );
+        }
     }
 
     /**

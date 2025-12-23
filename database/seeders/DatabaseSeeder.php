@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
             PromotionSeeder::class, // Creates coupons
             OrderSeeder::class, // Creates orders using customers and products
             ReviewSeeder::class, // Creates reviews
+            CollectionSeeder::class,
         ]);
     }
 }

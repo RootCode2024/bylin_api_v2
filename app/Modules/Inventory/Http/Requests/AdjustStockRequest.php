@@ -5,43 +5,44 @@ declare(strict_types=1);
 namespace Modules\Inventory\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class AdjustStockRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
-        return true; // Authorization handled by admin middleware
+        return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     */
     public function rules(): array
     {
         return [
-            'product_id' => 'required|uuid|exists:products,id',
-            'variation_id' => 'nullable|uuid|exists:product_variations,id',
-            'quantity' => 'required|integer|not_in:0', // Can be positive or negative
-            'type' => 'required|in:adjustment,restock,damage,return,theft,correction',
-            'reason' => 'required|string|max:500',
-            'reference_number' => 'nullable|string|max:100',
+            'product_id' => ['required_without:variation_id', 'uuid', 'exists:products,id'],
+            'variation_id' => ['required_without:product_id', 'uuid', 'exists:product_variations,id'],
+            'quantity' => ['required', 'integer', 'min:0'],
+            'operation' => ['required', Rule::in(['set', 'add', 'sub'])],
+            'reason' => ['required', 'string', Rule::in([
+                'initial_stock',
+                'purchase',
+                'sale',
+                'return',
+                'damage',
+                'theft',
+                'adjustment',
+                'transfer',
+                'other'
+            ])],
+            'notes' => ['nullable', 'string', 'max:1000'],
         ];
     }
 
-    /**
-     * Get custom messages for validator errors.
-     */
     public function messages(): array
     {
         return [
-            'product_id.exists' => 'The specified product does not exist.',
-            'variation_id.exists' => 'The specified product variation does not exist.',
-            'quantity.not_in' => 'Stock adjustment quantity cannot be zero.',
-            'type.in' => 'Invalid stock adjustment type.',
-            'reason.required' => 'Please provide a reason for the stock adjustment.',
+            'product_id.required_without' => 'Le produit ou la variation est requis',
+            'variation_id.required_without' => 'Le produit ou la variation est requis',
+            'quantity.required' => 'La quantité est requise',
+            'reason.required' => 'La raison de l\'ajustement est requise',
         ];
     }
 }

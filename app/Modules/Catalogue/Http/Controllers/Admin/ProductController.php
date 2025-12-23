@@ -30,24 +30,16 @@ class ProductController extends ApiController
         private PreorderService $preorderService
     ) {}
 
-    /**
-     * Display a listing of products
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function index(Request $request): JsonResponse
     {
         $query = Product::query()
-            ->with(['brand', 'categories', 'variations'])
+            ->with(['brand', 'categories', 'variations', 'media'])
             ->withCount('variations');
 
-        // Search
         if ($request->filled('search')) {
             $query->search($request->search);
         }
 
-        // Filters
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
@@ -72,17 +64,14 @@ class ProductController extends ApiController
             $query->preorder();
         }
 
-        // Price range
         if ($request->filled('min_price') && $request->filled('max_price')) {
             $query->priceBetween($request->min_price, $request->max_price);
         }
 
-        // Sorting
         $sortBy = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
         $query->orderBy($sortBy, $sortOrder);
 
-        // Pagination
         $perPage = min($request->get('per_page', 15), 100);
         $products = $query->paginate($perPage);
 

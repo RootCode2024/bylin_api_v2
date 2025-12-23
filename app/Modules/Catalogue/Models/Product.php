@@ -34,6 +34,7 @@ class Product extends BaseModel implements HasMedia
     protected $fillable = [
         // Basic info
         'brand_id',
+        'collection_id',
         'name',
         'slug',
         'sku',
@@ -155,6 +156,72 @@ class Product extends BaseModel implements HasMedia
     public function brand()
     {
         return $this->belongsTo(Brand::class);
+    }
+
+    public function collection()
+    {
+        return $this->belongsTo(Collection::class);
+    }
+
+    /**
+     * Authenticity codes relationship
+     */
+    public function authenticityCodes()
+    {
+        return $this->hasMany(ProductAuthenticityCode::class);
+    }
+
+    /**
+     * Check if product is a Bylin product
+     */
+    public function isBylinProduct(): bool
+    {
+        return $this->brand && $this->brand->is_bylin_brand;
+    }
+
+    /**
+     * Check if product requires authenticity verification
+     */
+    public function requiresAuthenticity(): bool
+    {
+        return $this->requires_authenticity === true;
+    }
+
+    /**
+     * Get available authenticity codes count
+     */
+    public function getAvailableAuthenticityCodesCount(): int
+    {
+        return $this->authenticityCodes()
+            ->where('is_authentic', true)
+            ->where('is_activated', false)
+            ->count();
+    }
+
+    /**
+     * Scope for Bylin products only
+     */
+    public function scopeBylin($query)
+    {
+        return $query->whereHas('brand', function ($q) {
+            $q->where('is_bylin_brand', true);
+        });
+    }
+
+    /**
+     * Scope for products requiring authenticity
+     */
+    public function scopeRequiresAuthenticity($query)
+    {
+        return $query->where('requires_authenticity', true);
+    }
+
+    /**
+     * Scope for products in a specific collection
+     */
+    public function scopeInCollection($query, string $collectionId)
+    {
+        return $query->where('collection_id', $collectionId);
     }
 
     /**

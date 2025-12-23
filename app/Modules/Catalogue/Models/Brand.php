@@ -32,6 +32,7 @@ class Brand extends BaseModel
         'is_active',
         'sort_order',
         'meta_data',
+        'is_bylin_brand',
     ];
 
     // Ajouter logo_url aux attributs retournés automatiquement
@@ -43,6 +44,7 @@ class Brand extends BaseModel
             'is_active' => 'boolean',
             'sort_order' => 'integer',
             'meta_data' => 'array',
+            'is_bylin_brand' => 'boolean',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
             'deleted_at' => 'datetime',
@@ -75,6 +77,38 @@ class Brand extends BaseModel
     public function products()
     {
         return $this->hasMany(Product::class);
+    }
+
+    /**
+     * Collections associated with this brand (Bylin only)
+     */
+    public function collections()
+    {
+        return $this->hasMany(Collection::class);
+    }
+
+    /**
+     * Check if this is the Bylin brand
+     */
+    public function isBylinBrand(): bool
+    {
+        return $this->is_bylin_brand === true;
+    }
+
+    /**
+     * Scope for Bylin brand only
+     */
+    public function scopeBylin($query)
+    {
+        return $query->where('is_bylin_brand', true);
+    }
+
+    /**
+     * Scope for non-Bylin brands
+     */
+    public function scopeNonBylin($query)
+    {
+        return $query->where('is_bylin_brand', false);
     }
 
     /**
