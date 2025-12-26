@@ -234,11 +234,11 @@ class Customer extends Authenticatable
             'email' => $this->email,
             'phone' => $this->phone,
             'status' => $this->status,
-            'date_of_birth' => $this->date_of_birth?->format('Y-m-d'),
+            'date_of_birth' => $this->date_of_birth?->format('d/m/Y'),
             'gender' => $this->gender,
-            'email_verified_at' => $this->email_verified_at?->format('Y-m-d H:i:s'),
-            'created_at' => $this->created_at->format('Y-m-d H:i:s'),
-            'updated_at' => $this->updated_at->format('Y-m-d H:i:s'),
+            'email_verified_at' => $this->email_verified_at?->format('d/m/Y H:i:s'),
+            'created_at' => $this->created_at->format('d/m/Y H:i:s'),
+            'updated_at' => $this->updated_at->format('d/m/Y H:i:s'),
         ];
     }
 

@@ -233,7 +233,7 @@ class CustomerController extends ApiController
                 $q->whereIn('id', $request->ids);
             });
 
-        $filename = 'customers_' . now()->format('Y-m-d_His');
+        $filename = 'customers_' . now()->format('d/m/Y_His');
 
         return Excel::download(
             new CustomersExport($query),

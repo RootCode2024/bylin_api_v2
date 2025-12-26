@@ -5,63 +5,39 @@ declare(strict_types=1);
 namespace Modules\Catalogue\Services;
 
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Modules\Catalogue\Models\Product;
 use Modules\Core\Services\BaseService;
 use Modules\Inventory\Models\StockMovement;
 use Modules\Catalogue\Models\ProductVariation;
 
-/**
- * Product Service
- *
- * Handles complex product logic including variations, stock, and media
- */
 class ProductService extends BaseService
 {
     public function __construct(
-        private PreorderService $preorderService,
         private ?ProductAuthenticityService $authenticityService = null
     ) {}
 
-    /**
-     * Create a new product
-     */
     public function createProduct(array $data): Product
     {
         return $this->transaction(function () use ($data) {
-            // Generate slug if not provided
-            if (empty($data['slug']) && !empty($data['name'])) {
-                $data['slug'] = Str::slug($data['name']);
-            }
 
-            // Extract relations
             $categories = $data['categories'] ?? [];
             $variations = $data['variations'] ?? [];
             $images = $data['images'] ?? [];
             unset($data['categories'], $data['variations'], $data['images']);
 
-            // Create main product
             $product = Product::create($data);
 
-            // Attach categories
-            if (!empty($categories)) {
-                $product->categories()->attach($categories);
-            }
+            if (!empty($categories)) $product->categories()->attach($categories);
 
-            // Handle variations
-            if (!empty($variations) && $product->is_variable) {
-                $this->createVariations($product, $variations);
-            }
+            if (!empty($variations) && $product->is_variable) $this->createVariations($product, $variations);
 
-            // Handle media
             if (!empty($images)) {
                 foreach ($images as $image) {
                     $product->addMedia($image)->toMediaCollection('images');
                 }
             }
 
-            // Handle Authenticity (Bylin Brand)
             if (
                 $this->authenticityService
                 && !empty($data['requires_authenticity'])
@@ -79,44 +55,25 @@ class ProductService extends BaseService
         });
     }
 
-    /**
-     * Update a product
-     */
     public function updateProduct(string $id, array $data): Product
     {
         return $this->transaction(function () use ($id, $data) {
             $product = Product::findOrFail($id);
 
-            // ✅ Extract variations BEFORE removing from data
             $variationsData = $data['variations'] ?? null;
 
-            // Extract other relations
             $categories = $data['categories'] ?? null;
             $imagesToDelete = $data['images_to_delete'] ?? [];
             $newImages = $data['images'] ?? [];
 
-            // Remove relations from update data
             unset($data['categories'], $data['variations'], $data['images'], $data['images_to_delete']);
 
-            // Update main product
             $product->update($data);
 
-            // Sync categories
-            if ($categories !== null) {
-                $product->categories()->sync($categories);
-            }
+            if ($categories !== null) $product->categories()->sync($categories);
+            if ($product->is_variable && $variationsData !== null) $this->syncVariations($product, $variationsData);
+            if (!empty($imagesToDelete)) $product->media()->whereIn('id', $imagesToDelete)->each->delete();
 
-            // ✅ Sync variations if product is variable
-            if ($product->is_variable && $variationsData !== null) {
-                $this->syncVariations($product, $variationsData);
-            }
-
-            // Delete images
-            if (!empty($imagesToDelete)) {
-                $product->media()->whereIn('id', $imagesToDelete)->each->delete();
-            }
-
-            // Add new images
             if (!empty($newImages)) {
                 foreach ($newImages as $image) {
                     $product->addMedia($image)->toMediaCollection('images');
@@ -129,9 +86,6 @@ class ProductService extends BaseService
         });
     }
 
-    /**
-     * Create variations for a product
-     */
     protected function createVariations(Product $product, array $variationsData): void
     {
         foreach ($variationsData as $variationData) {
@@ -152,9 +106,6 @@ class ProductService extends BaseService
         }
     }
 
-    /**
-     * Synchronize variations
-     */
     protected function syncVariations(Product $product, array $variationsData): void
     {
         $this->logInfo('Syncing variations', [
@@ -168,27 +119,25 @@ class ProductService extends BaseService
         foreach ($variationsData as $index => $variationData) {
             $variationId = $variationData['id'] ?? null;
 
-            // ✅ FIX: Convertir stock_quantity en integer
             $stockQuantity = (int) ($variationData['stock_quantity'] ?? 0);
 
             if ($variationId && in_array($variationId, $existingVariationIds)) {
-                // UPDATE existing variation
+
                 $variation = ProductVariation::find($variationId);
 
                 if ($variation) {
                     $updateData = [
                         'variation_name' => $variationData['variation_name'],
-                        'price' => (float) $variationData['price'], // ✅ Cast to float
+                        'price' => (float) $variationData['price'],
                         'compare_price' => isset($variationData['compare_price']) ? (float) $variationData['compare_price'] : null,
                         'cost_price' => isset($variationData['cost_price']) ? (float) $variationData['cost_price'] : null,
-                        'stock_quantity' => $stockQuantity, // ✅ Already casted
+                        'stock_quantity' => $stockQuantity,
                         'stock_status' => $this->determineStockStatus($stockQuantity),
                         'is_active' => (bool) ($variationData['is_active'] ?? true),
                         'attributes' => $variationData['attributes'] ?? [],
                         'barcode' => $variationData['barcode'] ?? null,
                     ];
 
-                    // Only update SKU if provided and different
                     if (!empty($variationData['sku']) && $variationData['sku'] !== $variation->sku) {
                         $updateData['sku'] = $variationData['sku'];
                     }
@@ -203,7 +152,7 @@ class ProductService extends BaseService
                     ]);
                 }
             } else {
-                // CREATE new variation
+
                 $newVariation = $product->variations()->create([
                     'variation_name' => $variationData['variation_name'],
                     'price' => (float) $variationData['price'],
@@ -226,7 +175,6 @@ class ProductService extends BaseService
             }
         }
 
-        // DELETE variations not in the request
         $idsToDelete = array_diff($existingVariationIds, $processedIds);
 
         if (!empty($idsToDelete)) {
@@ -244,15 +192,11 @@ class ProductService extends BaseService
         ]);
     }
 
-    /**
-     * Generate unique SKU for variation
-     */
     protected function generateVariationSku(Product $product, array $variationData): string
     {
         $baseSku = $product->sku;
         $suffix = Str::upper(Str::random(4));
 
-        // Add suffix based on attributes if available
         if (!empty($variationData['attributes'])) {
             $attrString = implode('-', array_values($variationData['attributes']));
             $suffix = Str::slug($attrString) . '-' . $suffix;
@@ -260,7 +204,6 @@ class ProductService extends BaseService
 
         $sku = "{$baseSku}-{$suffix}";
 
-        // Ensure uniqueness
         $count = 1;
         $originalSku = $sku;
 
@@ -272,9 +215,6 @@ class ProductService extends BaseService
         return $sku;
     }
 
-    /**
-     * Delete a product
-     */
     public function deleteProduct(string $id): bool
     {
         return $this->transaction(function () use ($id) {
@@ -287,9 +227,6 @@ class ProductService extends BaseService
         });
     }
 
-    /**
-     * Duplicate a product
-     */
     public function duplicateProduct(string $id): Product
     {
         return $this->transaction(function () use ($id) {
@@ -297,7 +234,6 @@ class ProductService extends BaseService
 
             $data = $original->toArray();
 
-            // Modify for duplication
             $data['name'] = $data['name'] . ' (Copy)';
             $data['slug'] = Str::slug($data['name'] . '-copy-' . Str::random(4));
             $data['sku'] = $data['sku'] . '-COPY-' . strtoupper(Str::random(4));
@@ -305,13 +241,9 @@ class ProductService extends BaseService
 
             unset($data['id'], $data['created_at'], $data['updated_at'], $data['deleted_at']);
 
-            // Create duplicate
             $duplicate = Product::create($data);
-
-            // Duplicate categories
             $duplicate->categories()->attach($original->categories->pluck('id'));
 
-            // Duplicate variations
             foreach ($original->variations as $variation) {
                 $varData = $variation->toArray();
                 $varData['sku'] = $varData['sku'] . '-COPY';
@@ -328,9 +260,6 @@ class ProductService extends BaseService
         });
     }
 
-    /**
-     * Bulk update products
-     */
     public function bulkUpdate(array $productIds, string $action): int
     {
         return $this->transaction(function () use ($productIds, $action) {
@@ -354,32 +283,13 @@ class ProductService extends BaseService
         });
     }
 
-    /**
-     * Export products to CSV
-     */
     public function exportProducts(array $filters = []): string
     {
         $this->logInfo('Products exported', ['filters' => $filters]);
 
-        return '/exports/products-' . now()->format('Y-m-d') . '.csv';
+        return '/exports/products-' . now()->format('d/m/Y') . '.csv';
     }
 
-    /**
-     * Calculate new quantity based on operation
-     */
-    private function calculateNewQuantity(int $current, int $value, string $operation): int
-    {
-        return match ($operation) {
-            'set' => $value,
-            'add' => $current + $value,
-            'sub' => $current - $value,
-            default => $current
-        };
-    }
-
-    /**
-     * Determine stock status
-     */
     private function determineStockStatus(int $quantity): string
     {
         if ($quantity <= 0) {
@@ -389,47 +299,6 @@ class ProductService extends BaseService
         return 'in_stock';
     }
 
-    /**
-     * Record inventory movement
-     */
-    private function recordInventoryMovement(
-        string $productId,
-        ?string $variationId,
-        int $quantityBefore,
-        int $quantityAfter,
-        int $quantityChanged,
-        string $type,
-        ?string $notes
-    ): void {
-        StockMovement::create([
-            'product_id' => $productId,
-            'variation_id' => $variationId,
-            'quantity_before' => $quantityBefore,
-            'quantity_after' => $quantityAfter,
-            'quantity_changed' => $quantityChanged,
-            'type' => $type,
-            'notes' => $notes,
-            'user_id' => Auth::id(),
-        ]);
-    }
-
-    /**
-     * Update product stock from all active variations
-     */
-    private function updateProductStockFromVariations(Product $product): void
-    {
-        if ($product->is_variable) {
-            $totalStock = $product->variations()
-                ->where('is_active', true)
-                ->sum('stock_quantity');
-
-            $product->update(['stock_quantity' => $totalStock]);
-        }
-    }
-
-    /**
-     * Update product stock
-     */
     public function updateStock(
         string $productId,
         int $quantity,
@@ -456,7 +325,6 @@ class ProductService extends BaseService
 
             $currentStock = $product->stock_quantity;
 
-            // Calculate final quantity
             $finalQuantity = match ($operation) {
                 'set' => $quantity,
                 'add' => $currentStock + $quantity,
@@ -471,11 +339,9 @@ class ProductService extends BaseService
                 ];
             }
 
-            // Determine movement type and reason
             $movementType = $this->determineMovementType($operation, $reason);
             $movementReason = $this->mapReasonToStockMovementReason($reason);
 
-            // Use StockMovement::createMovement
             $movement = StockMovement::createMovement([
                 'product_id' => $productId,
                 'variation_id' => null,
@@ -499,9 +365,6 @@ class ProductService extends BaseService
         }
     }
 
-    /**
-     * Update variation stock
-     */
     public function updateVariationStock(
         string $productId,
         string $variationId,
@@ -511,14 +374,11 @@ class ProductService extends BaseService
         ?string $notes = null
     ): array {
         try {
-            $product = Product::findOrFail($productId);
-            $variation = ProductVariation::where('product_id', $productId)
-                ->where('id', $variationId)
-                ->firstOrFail();
+            Product::findOrFail($productId);
+            $variation = ProductVariation::where('product_id', $productId)->where('id', $variationId)->firstOrFail();
 
             $currentStock = $variation->stock_quantity;
 
-            // Calculate final quantity
             $finalQuantity = match ($operation) {
                 'set' => $quantity,
                 'add' => $currentStock + $quantity,
@@ -533,11 +393,9 @@ class ProductService extends BaseService
                 ];
             }
 
-            // Determine movement type and reason
             $movementType = $this->determineMovementType($operation, $reason);
             $movementReason = $this->mapReasonToStockMovementReason($reason);
 
-            // Use StockMovement::createMovement
             $movement = StockMovement::createMovement([
                 'product_id' => $productId,
                 'variation_id' => $variationId,
@@ -561,20 +419,11 @@ class ProductService extends BaseService
         }
     }
 
-    /**
-     * Get stock history for a product
-     */
     public function getStockHistory(string $productId, int $perPage = 15)
     {
-        return StockMovement::with(['creator', 'variation'])
-            ->forProduct($productId)
-            ->latest()
-            ->paginate($perPage);
+        return StockMovement::with(['creator', 'variation'])->forProduct($productId)->latest()->paginate($perPage);
     }
 
-    /**
-     * Reserve stock (for orders)
-     */
     public function reserveStock(string $productId, ?string $variationId, int $quantity, ?string $orderId = null): bool
     {
         try {
@@ -607,9 +456,6 @@ class ProductService extends BaseService
         }
     }
 
-    /**
-     * Release stock (cancel order)
-     */
     public function releaseStock(string $productId, ?string $variationId, int $quantity, ?string $orderId = null): bool
     {
         try {
@@ -642,24 +488,11 @@ class ProductService extends BaseService
         }
     }
 
-    /**
-     * Determine movement type based on operation and reason
-     */
     private function determineMovementType(string $operation, ?string $reason): string
     {
-        // If explicit reason suggests direction
-        if ($reason === 'sale' || $reason === 'damage' || $reason === 'theft') {
-            return StockMovement::TYPE_OUT;
-        }
-
-        if ($reason === 'purchase' || $reason === 'return') {
-            return StockMovement::TYPE_IN;
-        }
-
-        // Otherwise determine by operation
-        if ($operation === 'set') {
-            return StockMovement::TYPE_ADJUSTMENT;
-        }
+        if ($operation === 'set') return StockMovement::TYPE_ADJUSTMENT;
+        if ($reason === 'purchase' || $reason === 'return') return StockMovement::TYPE_IN;
+        if ($reason === 'sale' || $reason === 'damage' || $reason === 'theft') return StockMovement::TYPE_OUT;
 
         return match ($operation) {
             'add' => StockMovement::TYPE_IN,
@@ -668,24 +501,19 @@ class ProductService extends BaseService
         };
     }
 
-    /**
-     * Map API reason to StockMovement reason constants
-     */
     private function mapReasonToStockMovementReason(?string $reason): string
     {
-        if (!$reason) {
-            return StockMovement::REASON_ADJUSTMENT;
-        }
+        if (!$reason) return StockMovement::REASON_ADJUSTMENT;
 
         return match ($reason) {
-            'initial_stock' => StockMovement::REASON_INITIAL_STOCK,
-            'purchase' => StockMovement::REASON_PURCHASE,
             'sale' => StockMovement::REASON_SALE,
+            'theft' => StockMovement::REASON_LOST,
             'return' => StockMovement::REASON_RETURN,
             'damage' => StockMovement::REASON_DAMAGED,
-            'theft' => StockMovement::REASON_LOST,
-            'adjustment' => StockMovement::REASON_ADJUSTMENT,
+            'purchase' => StockMovement::REASON_PURCHASE,
             'transfer' => StockMovement::REASON_ADJUSTMENT,
+            'adjustment' => StockMovement::REASON_ADJUSTMENT,
+            'initial_stock' => StockMovement::REASON_INITIAL_STOCK,
             default => StockMovement::REASON_ADJUSTMENT
         };
     }

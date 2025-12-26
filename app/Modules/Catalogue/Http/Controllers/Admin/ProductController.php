@@ -13,16 +13,10 @@ use Modules\Catalogue\Models\Product;
 use Modules\Catalogue\Services\ProductService;
 use Modules\Catalogue\Services\PreorderService;
 use Modules\Core\Http\Controllers\ApiController;
-use Modules\Catalogue\Http\Resources\ProductResource;
 use Modules\Catalogue\Http\Requests\UpdateStockRequest;
 use Modules\Catalogue\Http\Requests\StoreProductRequest;
 use Modules\Catalogue\Http\Requests\UpdateProductRequest;
 
-/**
- * Product Controller
- *
- * Handles all product CRUD operations, stock management, and preorder logic
- */
 class ProductController extends ApiController
 {
     public function __construct(
@@ -32,44 +26,21 @@ class ProductController extends ApiController
 
     public function index(Request $request): JsonResponse
     {
-        $query = Product::query()
-            ->with(['brand', 'categories', 'variations', 'media'])
-            ->withCount('variations');
+        $query = Product::query()->with(['brand', 'categories', 'variations', 'media'])->withCount('variations');
 
-        if ($request->filled('search')) {
-            $query->search($request->search);
-        }
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->filled('brand_id')) {
-            $query->where('brand_id', $request->brand_id);
-        }
-
-        if ($request->filled('category_id')) {
-            $query->inCategory($request->category_id);
-        }
-
-        if ($request->filled('is_featured')) {
-            $query->featured();
-        }
-
-        if ($request->filled('in_stock')) {
-            $query->inStock();
-        }
-
-        if ($request->filled('is_preorder')) {
-            $query->preorder();
-        }
-
-        if ($request->filled('min_price') && $request->filled('max_price')) {
-            $query->priceBetween($request->min_price, $request->max_price);
-        }
+        if ($request->filled('in_stock')) $query->inStock();
+        if ($request->filled('is_featured')) $query->featured();
+        if ($request->filled('is_preorder')) $query->preorder();
+        if ($request->filled('search')) $query->search($request->search);
+        if ($request->filled('status')) $query->where('status', $request->status);
+        if ($request->filled('category_id')) $query->inCategory($request->category_id);
+        if ($request->filled('brand_id')) $query->where('brand_id', $request->brand_id);
+        if ($request->filled('collection_id')) $query->where('collection_id', $request->collection_id);
+        if ($request->filled('min_price') && $request->filled('max_price')) $query->priceBetween($request->min_price, $request->max_price);
 
         $sortBy = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
+
         $query->orderBy($sortBy, $sortOrder);
 
         $perPage = min($request->get('per_page', 15), 100);
@@ -81,12 +52,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Store a newly created product
-     *
-     * @param StoreProductRequest $request
-     * @return JsonResponse
-     */
     public function store(StoreProductRequest $request): JsonResponse
     {
         $product = $this->productService->createProduct($request->validated());
@@ -97,12 +62,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Display the specified product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function show(string $id): JsonResponse
     {
         $product = Product::with([
@@ -119,13 +78,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Update the specified product
-     *
-     * @param string $id
-     * @param UpdateProductRequest $request
-     * @return JsonResponse
-     */
     public function update(string $id, UpdateProductRequest $request): JsonResponse
     {
         $product = $this->productService->updateProduct($id, $request->validated());
@@ -136,12 +88,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Remove the specified product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function destroy(string $id): JsonResponse
     {
         $this->productService->deleteProduct($id);
@@ -152,12 +98,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Restore a soft-deleted product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function restore(string $id): JsonResponse
     {
         $product = Product::withTrashed()->findOrFail($id);
@@ -169,12 +109,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Permanently delete a product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function forceDelete(string $id): JsonResponse
     {
         $product = Product::withTrashed()->findOrFail($id);
@@ -186,13 +120,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Update product stock
-     *
-     * @param string $id
-     * @param UpdateStockRequest $request
-     * @return JsonResponse
-     */
     public function updateStock(string $id, UpdateStockRequest $request): JsonResponse
     {
         Log::alert($request);
@@ -214,9 +141,6 @@ class ProductController extends ApiController
         return $this->errorResponse($result['message'], 400);
     }
 
-    /**
-     * Update variation stock
-     */
     public function updateVariationStock(
         string $productId,
         string $variationId,
@@ -241,9 +165,6 @@ class ProductController extends ApiController
         return $this->errorResponse($result['message'], 400);
     }
 
-    /**
-     * Get stock history for a product
-     */
     public function stockHistory(string $id, Request $request): JsonResponse
     {
         $perPage = $request->input('per_page', 15);
@@ -256,13 +177,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Enable preorder for a product
-     *
-     * @param string $id
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function enablePreorder(string $id, Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -288,12 +202,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Disable preorder for a product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function disablePreorder(string $id): JsonResponse
     {
         $product = $this->preorderService->disablePreorder($id, 'manual');
@@ -304,12 +212,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Get preorder information for a product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function preorderInfo(string $id): JsonResponse
     {
         $info = $this->preorderService->getPreorderInfo($id);
@@ -320,12 +222,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Duplicate a product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function duplicate(string $id): JsonResponse
     {
         $product = $this->productService->duplicateProduct($id);
@@ -336,12 +232,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Bulk update products
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function bulkUpdate(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -361,12 +251,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Export products to CSV
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function export(Request $request): JsonResponse
     {
         $filters = $request->only([
@@ -384,11 +268,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Get product statistics
-     *
-     * @return JsonResponse
-     */
     public function statistics(): JsonResponse
     {
         $stats = [

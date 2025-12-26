@@ -8,28 +8,10 @@ use Spatie\MediaLibrary\HasMedia;
 use Modules\Core\Models\BaseModel;
 use Modules\Core\Traits\HasStatus;
 use Modules\Core\Traits\Searchable;
-use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * Collection Model
- *
- * Collections Bylin pour organiser les produits par saison/thème
- *
- * @property string $id
- * @property string $name
- * @property string $slug
- * @property string|null $description
- * @property string|null $season
- * @property string|null $theme
- * @property \Carbon\Carbon|null $release_date
- * @property \Carbon\Carbon|null $end_date
- * @property bool $is_active
- * @property bool $is_featured
- * @property int $products_count
- * @property int $total_stock
- */
+
 class Collection extends BaseModel implements HasMedia
 {
     use HasStatus, Searchable, InteractsWithMedia, SoftDeletes;
@@ -44,8 +26,6 @@ class Collection extends BaseModel implements HasMedia
         'theme',
         'release_date',
         'end_date',
-        'cover_image',
-        'banner_image',
         'is_active',
         'is_featured',
         'sort_order',
@@ -75,6 +55,7 @@ class Collection extends BaseModel implements HasMedia
         ];
     }
 
+    // ✅ Appends pour compatibilité avec le frontend
     protected $appends = ['cover_image_url', 'banner_image_url'];
 
     /**
@@ -117,44 +98,60 @@ class Collection extends BaseModel implements HasMedia
 
     /*
     |--------------------------------------------------------------------------
-    | ACCESSORS & MUTATORS
+    | ACCESSORS & MUTATORS - Using Spatie Media Library
     |--------------------------------------------------------------------------
     */
 
     /**
-     * Get full URL for cover image
+     * Get full URL for cover image from Media Library
      */
     public function getCoverImageUrlAttribute(): ?string
     {
-        if (!$this->cover_image) {
-            return null;
-        }
-
-        if (filter_var($this->cover_image, FILTER_VALIDATE_URL)) {
-            return $this->cover_image;
-        }
-
-        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-        $disk = Storage::disk('public');
-        return $disk->url($this->cover_image);
+        $media = $this->getFirstMedia('cover');
+        return $media ? $media->getUrl() : null;
     }
 
     /**
-     * Get full URL for banner image
+     * Get full URL for banner image from Media Library
      */
     public function getBannerImageUrlAttribute(): ?string
     {
-        if (!$this->banner_image) {
-            return null;
-        }
+        $media = $this->getFirstMedia('banner');
+        return $media ? $media->getUrl() : null;
+    }
 
-        if (filter_var($this->banner_image, FILTER_VALIDATE_URL)) {
-            return $this->banner_image;
-        }
+    /**
+     * Get cover image thumbnail (if conversions are set up)
+     */
+    public function getCoverImageThumbnailAttribute(): ?string
+    {
+        $media = $this->getFirstMedia('cover');
+        return $media ? $media->getUrl('thumb') : null;
+    }
 
-        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-        $disk = Storage::disk('public');
-        return $disk->url($this->banner_image);
+    /**
+     * Get banner image thumbnail (if conversions are set up)
+     */
+    public function getBannerImageThumbnailAttribute(): ?string
+    {
+        $media = $this->getFirstMedia('banner');
+        return $media ? $media->getUrl('thumb') : null;
+    }
+
+    /**
+     * Check if collection has a cover image
+     */
+    public function hasCoverImage(): bool
+    {
+        return $this->hasMedia('cover');
+    }
+
+    /**
+     * Check if collection has a banner image
+     */
+    public function hasBannerImage(): bool
+    {
+        return $this->hasMedia('banner');
     }
 
     /**
@@ -324,7 +321,7 @@ class Collection extends BaseModel implements HasMedia
 
     /*
     |--------------------------------------------------------------------------
-    | MEDIA LIBRARY
+    | MEDIA LIBRARY - Spatie Configuration
     |--------------------------------------------------------------------------
     */
 
@@ -344,5 +341,23 @@ class Collection extends BaseModel implements HasMedia
 
         $this->addMediaCollection('gallery')
             ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp']);
+    }
+
+    /**
+     * Register media conversions (optional - for thumbnails)
+     */
+    public function registerMediaConversions(\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void
+    {
+        $this->addMediaConversion('thumb')
+            ->width(200)
+            ->height(200)
+            ->sharpen(10)
+            ->nonQueued();
+
+        $this->addMediaConversion('medium')
+            ->width(800)
+            ->height(800)
+            ->sharpen(5)
+            ->nonQueued();
     }
 }

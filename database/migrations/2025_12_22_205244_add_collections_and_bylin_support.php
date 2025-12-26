@@ -44,10 +44,6 @@ return new class extends Migration
             $table->date('release_date')->nullable();
             $table->date('end_date')->nullable()->comment('Date de fin de disponibilité');
 
-            // Media
-            $table->string('cover_image')->nullable();
-            $table->string('banner_image')->nullable();
-
             // Status & visibility
             $table->boolean('is_active')->default(true);
             $table->boolean('is_featured')->default(false);

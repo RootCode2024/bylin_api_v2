@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations
-     */
     public function up(): void
     {
         /*
@@ -21,7 +18,6 @@ return new class extends Migration
             $table->string('name')->unique();
             $table->string('slug')->unique();
             $table->text('description')->nullable();
-            $table->string('logo')->nullable();
             $table->string('website')->nullable();
             $table->boolean('is_active')->default(true);
             $table->integer('sort_order')->default(0);
@@ -35,68 +31,50 @@ return new class extends Migration
 
         /*
         |--------------------------------------------------------------------------
-        | CATEGORIES (sans FK auto-référencée ici)
+        | CATEGORIES
         |--------------------------------------------------------------------------
         */
         Schema::create('categories', function (Blueprint $table) {
             $table->uuid('id')->primary();
 
-            // Hiérarchie
             $table->uuid('parent_id')->nullable();
+            $table->foreign('parent_id')
+                ->references('id')
+                ->on('categories')
+                ->nullOnDelete();
 
-            // Informations de base
             $table->string('name', 100);
             $table->string('slug', 150)->unique();
             $table->text('description')->nullable();
 
-            // Média
             $table->string('image')->nullable();
             $table->string('icon', 50)->nullable();
             $table->string('color', 7)->nullable();
 
-            // Hiérarchie calculée
             $table->tinyInteger('level')->default(0);
             $table->string('path', 500)->nullable();
 
-            // Configuration
             $table->boolean('is_active')->default(true);
             $table->boolean('is_visible_in_menu')->default(true);
             $table->boolean('is_featured')->default(false);
             $table->integer('sort_order')->default(0);
 
-            // SEO
             $table->string('meta_title')->nullable();
             $table->text('meta_description')->nullable();
 
-            // Statistiques
             $table->integer('products_count')->default(0);
 
-            // Métadonnées
             $table->json('meta_data')->nullable();
 
-            // Timestamps
             $table->timestamps();
             $table->softDeletes();
 
-            // Index
             $table->index('parent_id');
             $table->index('level');
             $table->index('path');
             $table->index('is_active');
             $table->index('sort_order');
             $table->index('deleted_at');
-        });
-
-        /*
-        |--------------------------------------------------------------------------
-        | FK auto-référencée categories.parent_id (POSTGRES SAFE)
-        |--------------------------------------------------------------------------
-        */
-        Schema::table('categories', function (Blueprint $table) {
-            $table->foreign('parent_id')
-                ->references('id')
-                ->on('categories')
-                ->nullOnDelete();
         });
 
         /*

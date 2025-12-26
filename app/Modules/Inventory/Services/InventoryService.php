@@ -281,7 +281,7 @@ class InventoryService extends BaseService
         $products = $query->get();
 
         // Generate file
-        $fileName = 'inventory_' . now()->format('Y-m-d_His') . '.' . $format;
+        $fileName = 'inventory_' . now()->format('d/m/Y_His') . '.' . $format;
 
         // Ensure directory exists
         $exportDir = storage_path('app/public/exports');
@@ -387,7 +387,7 @@ class InventoryService extends BaseService
                 $product->low_stock_threshold,
                 $product->stock_quantity > 0 ? 'In Stock' : 'Out of Stock',
                 number_format($product->price / 100, 2), // Assuming price in cents
-                $product->updated_at->format('Y-m-d H:i:s')
+                $product->updated_at->format('d/m/Y H:i:s')
             ]);
         }
 

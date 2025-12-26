@@ -20,7 +20,7 @@ class UpdateCollectionRequest extends FormRequest
     public function authorize(): bool
     {
         // Vérifier si l'utilisateur est admin
-        return $this->user() && $this->user()->hasRole('admin');
+        return $this->user() && ($this->user()->hasRole('admin') || $this->user()->hasRole('super_admin'));
     }
 
     /**
