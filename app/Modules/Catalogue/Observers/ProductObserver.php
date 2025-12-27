@@ -35,16 +35,13 @@ class ProductObserver
         $product->sku = $this->generateUniqueSku();
         $product->barcode = $this->generateUniqueBarcode();
 
-        // ✅ VALIDATION BYLIN - Si c'est un produit de la marque Bylin
         $this->enforceBylinRules($product);
 
-        // Définir le statut initial selon le stock
         if ($product->stock_quantity === 0) {
-            if ($product->status === ProductStatus::ACTIVE->value) {
-                $product->status = ProductStatus::OUT_OF_STOCK->value;
+            if ($product->status === ProductStatus::ACTIVE) {
+                $product->status = ProductStatus::OUT_OF_STOCK;
             }
 
-            // Activer la précommande AVANT la création
             if (!$product->is_preorder_enabled) {
                 $this->enableAutomaticPreorder($product);
             }
@@ -61,7 +58,6 @@ class ProductObserver
      */
     public function updating(Product $product): void
     {
-        // ✅ VALIDATION BYLIN - Vérifier si la marque a changé
         if ($product->isDirty('brand_id')) {
             $this->enforceBylinRules($product);
         }
@@ -134,7 +130,7 @@ class ProductObserver
     }
 
     /**
-     * ✅ NOUVEAU - Valide la suppression de collection_id
+     * Valide la suppression de collection_id
      */
     protected function validateCollectionRemoval(Product $product): void
     {
@@ -182,9 +178,9 @@ class ProductObserver
     protected function handleOutOfStock(Product $product, int $previousStock): void
     {
         // Changer le statut en OUT_OF_STOCK si actuellement ACTIVE
-        if ($product->status === ProductStatus::ACTIVE->value) {
-            $oldStatus = ProductStatus::from($product->status);
-            $product->status = ProductStatus::OUT_OF_STOCK->value;
+        if ($product->status === ProductStatus::ACTIVE) {
+            $oldStatus = $product->status;
+            $product->status = ProductStatus::OUT_OF_STOCK;
 
             // Dispatch ProductStatusChanged (sans sauvegarder encore)
             event(new ProductStatusChanged(
@@ -225,9 +221,9 @@ class ProductObserver
         }
 
         // Changer le statut en ACTIVE si actuellement OUT_OF_STOCK ou PREORDER
-        if (in_array($product->status, [ProductStatus::OUT_OF_STOCK->value, ProductStatus::PREORDER->value])) {
-            $oldStatus = ProductStatus::from($product->status);
-            $product->status = ProductStatus::ACTIVE->value;
+        if (in_array($product->status, [ProductStatus::OUT_OF_STOCK, ProductStatus::PREORDER])) {
+            $oldStatus = $product->status;
+            $product->status = ProductStatus::ACTIVE;
 
             event(new ProductStatusChanged(
                 product: $product,
@@ -242,10 +238,16 @@ class ProductObserver
      */
     protected function handleStatusChange(Product $product): void
     {
-        $oldStatus = ProductStatus::from($product->getOriginal('status'));
-        $newStatus = ProductStatus::from($product->status);
+        $oldStatus = $product->getOriginal('status');
+        $newStatus = $product->status;
 
-        // Dispatch ProductStatusChanged
+        if (is_string($oldStatus)) {
+            $oldStatus = ProductStatus::from($oldStatus);
+        }
+        if (is_string($newStatus)) {
+            $newStatus = ProductStatus::from($newStatus);
+        }
+
         event(new ProductStatusChanged(
             product: $product,
             oldStatus: $oldStatus,

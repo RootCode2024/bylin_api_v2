@@ -6,13 +6,18 @@ namespace Modules\Catalogue\Services;
 
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
+use Modules\Catalogue\Enums\ProductStatus;
 use Modules\Catalogue\Models\Product;
 use Modules\Core\Services\BaseService;
 use Modules\Inventory\Models\StockMovement;
 use Modules\Catalogue\Models\ProductVariation;
+use Modules\Catalogue\Models\ProductAuthenticityCode;
 
 class ProductService extends BaseService
 {
+
+    private const BYLIN_BRAND_SLUG = 'bylin';
+
     public function __construct(
         private ?ProductAuthenticityService $authenticityService = null
     ) {}
@@ -30,7 +35,9 @@ class ProductService extends BaseService
 
             if (!empty($categories)) $product->categories()->attach($categories);
 
-            if (!empty($variations) && $product->is_variable) $this->createVariations($product, $variations);
+            if (!empty($variations) && $product->is_variable) {
+                $this->createVariations($product, $variations);
+            }
 
             if (!empty($images)) {
                 foreach ($images as $image) {
@@ -38,15 +45,19 @@ class ProductService extends BaseService
                 }
             }
 
-            if (
-                $this->authenticityService
-                && !empty($data['requires_authenticity'])
-                && $data['requires_authenticity']
-            ) {
+            if ($this->shouldGenerateAuthenticityCode($product, $data)) {
+                $codesCount = (int) ($data['authenticity_codes_count'] ?? 10);
+
                 $this->authenticityService->generateAuthenticityCode(
                     $product->id,
-                    $data['authenticity_codes_count'] ?? 10
+                    $codesCount
                 );
+
+                $this->logInfo('Authenticity codes generated for new product', [
+                    'product_id' => $product->id,
+                    'brand' => $product->brand->name ?? 'Unknown',
+                    'codes_count' => $codesCount
+                ]);
             }
 
             $this->logInfo('Product created', ['product_id' => $product->id]);
@@ -60,24 +71,51 @@ class ProductService extends BaseService
         return $this->transaction(function () use ($id, $data) {
             $product = Product::findOrFail($id);
 
-            $variationsData = $data['variations'] ?? null;
+            // Capturer l'état AVANT la mise à jour
+            $wasAuthenticationRequired = $product->requires_authenticity;
 
+            $variationsData = $data['variations'] ?? null;
             $categories = $data['categories'] ?? null;
             $imagesToDelete = $data['images_to_delete'] ?? [];
             $newImages = $data['images'] ?? [];
+            $requestedCodesCount = (int) ($data['authenticity_codes_count'] ?? 0);
 
             unset($data['categories'], $data['variations'], $data['images'], $data['images_to_delete']);
 
+            // Mise à jour du produit
             $product->update($data);
 
-            if ($categories !== null) $product->categories()->sync($categories);
-            if ($product->is_variable && $variationsData !== null) $this->syncVariations($product, $variationsData);
-            if (!empty($imagesToDelete)) $product->media()->whereIn('id', $imagesToDelete)->each->delete();
+            if ($categories !== null) {
+                $product->categories()->sync($categories);
+            }
+
+            if ($product->is_variable && $variationsData !== null) {
+                $this->syncVariations($product, $variationsData);
+            }
+
+            if (!empty($imagesToDelete)) {
+                $product->media()->whereIn('id', $imagesToDelete)->each->delete();
+            }
 
             if (!empty($newImages)) {
                 foreach ($newImages as $image) {
                     $product->addMedia($image)->toMediaCollection('images');
                 }
+            }
+
+            // ✅ Gestion des codes d'authenticité APRÈS la mise à jour
+            if ($this->shouldGenerateAuthenticityCode($product, $data)) {
+                $this->handleAuthenticityCodesUpdate(
+                    $product,
+                    $requestedCodesCount,
+                    $wasAuthenticationRequired
+                );
+            } elseif ($wasAuthenticationRequired && !$product->requires_authenticity) {
+                // Désactivation de l'authentification
+                $this->logInfo('Authenticity requirement disabled', [
+                    'product_id' => $product->id,
+                    'note' => 'Existing codes kept for historical purposes'
+                ]);
             }
 
             $this->logInfo('Product updated', ['product_id' => $product->id]);
@@ -86,19 +124,162 @@ class ProductService extends BaseService
         });
     }
 
+    private function shouldGenerateAuthenticityCode(Product $product, array $data): bool
+    {
+        // Vérifier si l'authentification est requise
+        $requiresAuth = $data['requires_authenticity'] ?? $product->requires_authenticity ?? false;
+
+        if (!$requiresAuth) {
+            return false;
+        }
+
+        // Vérifier si c'est la marque Bylin
+        $isBylinBrand = $this->isBylinProduct($product);
+
+        if (!$isBylinBrand) {
+            $this->logWarning('Authenticity codes requested for non-Bylin product', [
+                'product_id' => $product->id,
+                'brand_id' => $product->brand_id,
+                'brand_name' => $product->brand->name ?? 'Unknown'
+            ]);
+
+            return false;
+        }
+
+        return $requiresAuth && $isBylinBrand && $this->authenticityService !== null;
+    }
+
+    private function isBylinProduct(Product $product): bool
+    {
+        $product->loadMissing('brand');
+
+        if (!$product->brand) {
+            return false;
+        }
+
+        // Vérifier par slug (plus flexible que l'ID qui peut changer entre environnements)
+        return strtolower($product->brand->slug) === self::BYLIN_BRAND_SLUG;
+    }
+
+    private function handleAuthenticityCodesUpdate(
+        Product $product,
+        int $requestedCount,
+        bool $wasAuthenticationRequired
+    ): void {
+        if (!$this->authenticityService) {
+            return;
+        }
+
+        // Récupérer les statistiques des codes existants
+        $stats = $this->getCodeStatistics($product->id);
+
+        $existingTotal = $stats['total'];
+        $activatedCount = $stats['activated'];
+        $unactivatedCount = $stats['unactivated'];
+
+        // Cas 1: Activation de l'authentification (aucun code existant)
+        if (!$wasAuthenticationRequired && $existingTotal === 0) {
+            $this->authenticityService->generateAuthenticityCode(
+                $product->id,
+                $requestedCount
+            );
+
+            $this->logInfo('Authenticity codes generated on activation', [
+                'product_id' => $product->id,
+                'codes_generated' => $requestedCount
+            ]);
+
+            return;
+        }
+
+        // Cas 2: Ajout de codes supplémentaires
+        if ($requestedCount > $existingTotal) {
+            $additionalCodes = $requestedCount - $existingTotal;
+
+            $this->authenticityService->generateAuthenticityCode(
+                $product->id,
+                $additionalCodes
+            );
+
+            $this->logInfo('Additional authenticity codes generated', [
+                'product_id' => $product->id,
+                'existing_total' => $existingTotal,
+                'existing_activated' => $activatedCount,
+                'existing_unactivated' => $unactivatedCount,
+                'additional_codes' => $additionalCodes,
+                'new_total' => $existingTotal + $additionalCodes
+            ]);
+
+            return;
+        }
+
+        // Cas 3: Réduction du nombre de codes demandé
+        if ($requestedCount < $existingTotal) {
+
+            // On ne peut PAS supprimer des codes déjà activés
+            if ($requestedCount < $activatedCount) {
+                $this->logWarning('Cannot reduce codes below activated count', [
+                    'product_id' => $product->id,
+                    'requested_count' => $requestedCount,
+                    'existing_total' => $existingTotal,
+                    'activated_count' => $activatedCount,
+                    'action' => 'Keeping all existing codes'
+                ]);
+
+                return;
+            }
+
+            // Calculer combien de codes non activés supprimer
+            $codesToDelete = $existingTotal - $requestedCount;
+
+            if ($codesToDelete <= $unactivatedCount) {
+                // Supprimer uniquement les codes non activés
+                $this->deleteUnactivatedCodes($product->id, $codesToDelete);
+
+                $this->logInfo('Unactivated authenticity codes removed', [
+                    'product_id' => $product->id,
+                    'codes_deleted' => $codesToDelete,
+                    'remaining_total' => $existingTotal - $codesToDelete,
+                    'remaining_activated' => $activatedCount
+                ]);
+
+                return;
+            }
+
+            // Si on arrive ici, c'est qu'il n'y a pas assez de codes non activés
+            $this->logWarning('Cannot reduce codes: not enough unactivated codes', [
+                'product_id' => $product->id,
+                'requested_count' => $requestedCount,
+                'unactivated_count' => $unactivatedCount,
+                'action' => 'Keeping existing codes'
+            ]);
+
+            return;
+        }
+
+        // Cas 4: Aucun changement nécessaire
+        $this->logInfo('Authenticity codes unchanged', [
+            'product_id' => $product->id,
+            'total_codes' => $existingTotal,
+            'activated_codes' => $activatedCount,
+            'unactivated_codes' => $unactivatedCount
+        ]);
+    }
+
     protected function createVariations(Product $product, array $variationsData): void
     {
         foreach ($variationsData as $variationData) {
-            $stockQuantity = $variationData['stock_quantity'] ?? 0;
+            // ✅ FIX: Convertir stock_quantity en entier
+            $stockQuantity = (int) ($variationData['stock_quantity'] ?? 0);
 
             $product->variations()->create([
                 'variation_name' => $variationData['variation_name'],
-                'price' => $variationData['price'],
-                'compare_price' => $variationData['compare_price'] ?? null,
-                'cost_price' => $variationData['cost_price'] ?? null,
+                'price' => (float) $variationData['price'], // ✅ Aussi convertir price en float
+                'compare_price' => isset($variationData['compare_price']) ? (float) $variationData['compare_price'] : null,
+                'cost_price' => isset($variationData['cost_price']) ? (float) $variationData['cost_price'] : null,
                 'stock_quantity' => $stockQuantity,
                 'stock_status' => $this->determineStockStatus($stockQuantity),
-                'is_active' => $variationData['is_active'] ?? true,
+                'is_active' => (bool) ($variationData['is_active'] ?? true),
                 'attributes' => $variationData['attributes'] ?? [],
                 'barcode' => $variationData['barcode'] ?? null,
                 'sku' => $variationData['sku'] ?? $this->generateVariationSku($product, $variationData),
@@ -119,6 +300,7 @@ class ProductService extends BaseService
         foreach ($variationsData as $index => $variationData) {
             $variationId = $variationData['id'] ?? null;
 
+            // ✅ FIX: Convertir stock_quantity en entier
             $stockQuantity = (int) ($variationData['stock_quantity'] ?? 0);
 
             if ($variationId && in_array($variationId, $existingVariationIds)) {
@@ -215,6 +397,38 @@ class ProductService extends BaseService
         return $sku;
     }
 
+    private function getCodeStatistics(string $productId): array
+    {
+        $total = ProductAuthenticityCode::where('product_id', $productId)->count();
+        $activated = ProductAuthenticityCode::where('product_id', $productId)
+            ->activated()
+            ->count();
+
+        return [
+            'total' => $total,
+            'activated' => $activated,
+            'unactivated' => $total - $activated,
+        ];
+    }
+
+    private function deleteUnactivatedCodes(string $productId, int $count): int
+    {
+        $codesToDelete = ProductAuthenticityCode::where('product_id', $productId)
+            ->where('is_activated', false)
+            ->orderBy('created_at', 'desc')
+            ->limit($count)
+            ->get();
+
+        $deletedCount = 0;
+
+        foreach ($codesToDelete as $code) {
+            $code->delete();
+            $deletedCount++;
+        }
+
+        return $deletedCount;
+    }
+
     public function deleteProduct(string $id): bool
     {
         return $this->transaction(function () use ($id) {
@@ -230,33 +444,66 @@ class ProductService extends BaseService
     public function duplicateProduct(string $id): Product
     {
         return $this->transaction(function () use ($id) {
-            $original = Product::with(['categories', 'variations'])->findOrFail($id);
+            $original = Product::with(['categories', 'variations', 'media'])->findOrFail($id);
 
             $data = $original->toArray();
 
-            $data['name'] = $data['name'] . ' (Copy)';
-            $data['slug'] = Str::slug($data['name'] . '-copy-' . Str::random(4));
-            $data['sku'] = $data['sku'] . '-COPY-' . strtoupper(Str::random(4));
+            $data['name'] = $data['name'] . ' (Copie)';
             $data['is_featured'] = false;
+            $data['status'] = ProductStatus::DRAFT;
 
-            unset($data['id'], $data['created_at'], $data['updated_at'], $data['deleted_at']);
+            // Nettoyage des champs auto-générés et timestamps
+            unset(
+                $data['id'],
+                $data['slug'],     
+                $data['sku'],       
+                $data['barcode'],  
+                $data['created_at'],
+                $data['updated_at'],
+                $data['deleted_at'],
+                $data['media']     
+            );
 
+            // Créer le produit dupliqué
             $duplicate = Product::create($data);
+
+            // Attacher les catégories
             $duplicate->categories()->attach($original->categories->pluck('id'));
 
-            foreach ($original->variations as $variation) {
-                $varData = $variation->toArray();
-                $varData['sku'] = $varData['sku'] . '-COPY';
-                unset($varData['id'], $varData['product_id']);
-                $duplicate->variations()->create($varData);
+            // Duplication des variations si elles existent
+            if ($original->is_variable && $original->variations->isNotEmpty()) {
+                foreach ($original->variations as $variation) {
+                    $varData = $variation->toArray();
+
+                    // Nettoyage des IDs et relations
+                    unset(
+                        $varData['id'],
+                        $varData['product_id'],
+                        $varData['created_at'],
+                        $varData['updated_at']
+                    );
+
+                    // Le SKU et barcode de la variation seront générés automatiquement
+                    // si vides dans ProductService::createVariations
+                    $varData['sku'] = null;
+                    $varData['barcode'] = null;
+
+                    $duplicate->variations()->create($varData);
+                }
+            }
+
+            // Duplication des images
+            foreach ($original->media as $media) {
+                $media->copy($duplicate, 'images');
             }
 
             $this->logInfo('Product duplicated', [
                 'original_id' => $id,
                 'duplicate_id' => $duplicate->id,
+                'variations_count' => $duplicate->variations->count()
             ]);
 
-            return $duplicate->fresh();
+            return $duplicate->fresh(['brand', 'categories', 'variations', 'media']);
         });
     }
 

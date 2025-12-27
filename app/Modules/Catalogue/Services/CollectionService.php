@@ -386,23 +386,62 @@ class CollectionService extends BaseService
     {
         $collection = $this->findOrFail($collectionId);
 
+        $baseQuery = $collection->products();
+
+        // Stats
+        $totalProducts  = (clone $baseQuery)->count();
+        $activeProducts = (clone $baseQuery)->where('status', 'active')->count();
+        $draftProducts  = (clone $baseQuery)->where('status', 'draft')->count();
+        $outOfStock     = (clone $baseQuery)->where('stock_quantity', '<=', 0)->count();
+        $lowStock       = (clone $baseQuery)
+            ->where('stock_quantity', '>', 0)
+            ->whereColumn('stock_quantity', '<=', 'low_stock_threshold')
+            ->count();
+
+        // Stock total
+        $totalStock = (int) (clone $baseQuery)->sum('stock_quantity');
+
+        // Valeur totale (stock * prix)
+        $totalValue = (float) (
+            (clone $baseQuery)
+            ->whereNotNull('price')
+            ->selectRaw('SUM(stock_quantity * price) as total')
+            ->value('total')
+            ?? 0
+        );
+
+        // Prix moyen sécurisé
+        $averagePriceRaw = (clone $baseQuery)
+            ->whereNotNull('price')
+            ->avg('price');
+
+        $averagePrice = round(
+            is_numeric($averagePriceRaw) ? (float) $averagePriceRaw : 0,
+            2
+        );
+
+        // Répartition par marque
+        $byBrand = (clone $baseQuery)
+            ->selectRaw('brand_id, COUNT(*) as count')
+            ->groupBy('brand_id')
+            ->with('brand:id,name')
+            ->get()
+            ->map(fn($item) => [
+                'brand_id'   => $item->brand_id,
+                'brand_name' => $item->brand?->name ?? 'Sans marque',
+                'count'      => (int) $item->count,
+            ]);
+
         return [
-            'total_products' => $collection->products()->count(),
-            'active_products' => $collection->products()->where('status', 'active')->count(),
-            'draft_products' => $collection->products()->where('status', 'draft')->count(),
-            'out_of_stock' => $collection->products()->where('stock_quantity', '<=', 0)->count(),
-            'low_stock' => $collection->products()->where('stock_quantity', '>', 0)->whereColumn('stock_quantity', '<=', 'low_stock_threshold')->count(),
-            'total_stock' => $collection->products()->sum('stock_quantity'),
-            'total_value' => $collection->products()->sum(DB::raw('stock_quantity * price')),
-            'average_price' => round($collection->products()->avg('price'), 2),
-            'by_brand' => $collection->products()->selectRaw('brand_id, COUNT(*) as count')->groupBy('brand_id')->with('brand:id,name')->get()
-                ->map(function ($item) {
-                    return [
-                        'brand_id' => $item->brand_id,
-                        'brand_name' => $item->brand?->name ?? 'Sans marque',
-                        'count' => $item->count,
-                    ];
-                }),
+            'total_products'  => $totalProducts,
+            'active_products' => $activeProducts,
+            'draft_products'  => $draftProducts,
+            'out_of_stock'    => $outOfStock,
+            'low_stock'       => $lowStock,
+            'total_stock'     => $totalStock,
+            'total_value'     => $totalValue,
+            'average_price'   => $averagePrice,
+            'by_brand'        => $byBrand,
         ];
     }
 

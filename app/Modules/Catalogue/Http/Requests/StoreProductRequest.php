@@ -10,7 +10,7 @@ class StoreProductRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true; // Géré par les policies
+        return true;
     }
 
     public function rules(): array
@@ -31,7 +31,7 @@ class StoreProductRequest extends FormRequest
             'low_stock_threshold' => ['nullable', 'integer', 'min:0'],
             'track_inventory' => ['boolean'],
 
-            // Précommande - NOMS UNIFORMISÉS
+            // Précommande
             'is_preorder_enabled' => ['boolean'],
             'preorder_available_date' => ['nullable', 'date', 'after:today'],
             'preorder_limit' => ['nullable', 'integer', 'min:1'],
@@ -63,8 +63,24 @@ class StoreProductRequest extends FormRequest
 
             // Variabilité
             'is_variable' => ['boolean'],
-            'variation_attributes' => ['nullable', 'array'],
-            'variation_attributes.*' => ['required', 'exists:attributes,id'],
+            
+            'variations' => ['nullable', 'array'],
+            'variations.*.sku' => ['nullable', 'string', 'max:100'],
+            'variations.*.variation_name' => ['required_with:variations.*', 'string', 'max:255'],
+
+            // Prix des variations
+            'variations.*.price' => ['required_with:variations.*', 'numeric', 'min:0'],
+            'variations.*.compare_price' => ['nullable', 'numeric', 'min:0'],
+            'variations.*.cost_price' => ['nullable', 'numeric', 'min:0'],
+
+            // Stock des variations
+            'variations.*.stock_quantity' => ['required_with:variations.*', 'integer', 'min:0'],
+            'variations.*.stock_status' => ['nullable', 'string', Rule::in(['in_stock', 'out_of_stock', 'on_backorder'])],
+
+            // Autres champs des variations
+            'variations.*.barcode' => ['nullable', 'string', 'max:100'],
+            'variations.*.is_active' => ['boolean'],
+            'variations.*.attributes' => ['nullable', 'array'],
 
             // Bylin Authenticity
             'requires_authenticity' => ['boolean'],
@@ -77,9 +93,8 @@ class StoreProductRequest extends FormRequest
 
         if ($this->isBylinProduct()) {
             $rules['collection_id'] = ['required', 'uuid', 'exists:collections,id'];
-            // requires_authenticity sera automatiquement à true via l'Observer
         } else {
-            $rules['collection_id'] = ['prohibited']; // Interdit pour non-Bylin
+            $rules['collection_id'] = ['prohibited'];
         }
 
         return $rules;
@@ -98,6 +113,11 @@ class StoreProductRequest extends FormRequest
             'collection_id.exists' => 'Cette collection n\'existe pas.',
             'collection_id.prohibited' => 'Seuls les produits Bylin peuvent avoir une collection.',
 
+            'variations.*.variation_name.required_with' => 'Le nom de la variation est obligatoire.',
+            'variations.*.price.required_with' => 'Le prix de la variation est obligatoire.',
+            'variations.*.stock_quantity.required_with' => 'La quantité en stock est obligatoire.',
+            'variations.*.stock_status.in' => 'Le statut du stock est invalide.',
+
             'images.*.image' => 'Le fichier doit être une image.',
             'images.*.max' => 'L\'image ne doit pas dépasser 5Mo.',
         ];
@@ -105,6 +125,7 @@ class StoreProductRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        // Convertir les booléens du produit
         $this->merge([
             'track_inventory' => $this->boolean('track_inventory', true),
             'is_preorder_enabled' => $this->boolean('is_preorder_enabled', false),
@@ -114,11 +135,32 @@ class StoreProductRequest extends FormRequest
             'is_variable' => $this->boolean('is_variable', false),
             'requires_authenticity' => $this->boolean('requires_authenticity', false),
         ]);
+
+        if ($this->has('variations') && is_array($this->variations)) {
+            $normalized = [];
+
+            foreach ($this->variations as $variation) {
+
+                if (isset($variation['is_active'])) {
+                    $variation['is_active'] = filter_var($variation['is_active'], FILTER_VALIDATE_BOOLEAN);
+                }
+
+                if (!isset($variation['stock_status']) && isset($variation['stock_quantity'])) {
+                    $variation['stock_status'] = $variation['stock_quantity'] > 0 ? 'in_stock' : 'out_of_stock';
+                }
+
+                // S'assurer que attributes est un tableau
+                if (!isset($variation['attributes'])) {
+                    $variation['attributes'] = [];
+                }
+
+                $normalized[] = $variation;
+            }
+
+            $this->merge(['variations' => $normalized]);
+        }
     }
 
-    /**
-     * Check if this product is for Bylin brand
-     */
     protected function isBylinProduct(): bool
     {
         if (!$this->has('brand_id')) {
@@ -130,12 +172,8 @@ class StoreProductRequest extends FormRequest
         return $brand && $brand->is_bylin_brand;
     }
 
-    /**
-     * Handle a passed validation attempt.
-     */
     protected function passedValidation(): void
     {
-        // Si c'est un produit Bylin, s'assurer que requires_authenticity est true
         if ($this->isBylinProduct()) {
             $this->merge(['requires_authenticity' => true]);
         }
@@ -170,7 +208,6 @@ class StoreProductRequest extends FormRequest
                 );
             }
 
-            // Validation : prix comparatif cohérent
             if ($this->has('compare_price') && $this->has('price')) {
                 if ($this->input('compare_price') <= $this->input('price')) {
                     $validator->errors()->add(
@@ -179,8 +216,7 @@ class StoreProductRequest extends FormRequest
                     );
                 }
             }
-            
-            // Précommande manuelle impossible avec du stock
+
             if ($this->is_preorder_enabled && $this->stock_quantity > 0) {
                 $validator->errors()->add(
                     'is_preorder_enabled',
@@ -188,13 +224,21 @@ class StoreProductRequest extends FormRequest
                 );
             }
 
-            // Authenticity réservée à Bylin
             if ($this->requires_authenticity && $this->brand_id) {
                 $brand = \Modules\Catalogue\Models\Brand::find($this->brand_id);
                 if ($brand && $brand->slug !== 'bylin') {
                     $validator->errors()->add(
                         'requires_authenticity',
                         'L\'authentification est réservée aux produits Bylin.'
+                    );
+                }
+            }
+            
+            if ($this->is_variable && $this->has('variations')) {
+                if (empty($this->variations)) {
+                    $validator->errors()->add(
+                        'variations',
+                        'Un produit variable doit avoir au moins une variation.'
                     );
                 }
             }

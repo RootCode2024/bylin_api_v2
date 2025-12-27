@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Modules\Catalogue\Http\Requests\EnablePreorderRequest;
 use Modules\Catalogue\Models\Product;
 use Modules\Catalogue\Services\ProductService;
 use Modules\Catalogue\Services\PreorderService;
@@ -17,8 +18,6 @@ use Modules\Catalogue\Models\ProductAuthenticityCode;
 use Modules\Catalogue\Http\Requests\UpdateStockRequest;
 use Modules\Catalogue\Http\Requests\StoreProductRequest;
 use Modules\Catalogue\Http\Requests\UpdateProductRequest;
-use Modules\Catalogue\Http\Requests\EnablePreorderRequest;
-use Modules\Catalogue\Http\Requests\BulkDestroyProductsRequest;
 
 class ProductController extends ApiController
 {
@@ -51,7 +50,7 @@ class ProductController extends ApiController
 
         return $this->successResponse(
             $products,
-            'Produits récupérés avec succès'
+            'Products retrieved successfully'
         );
     }
 
@@ -185,7 +184,7 @@ class ProductController extends ApiController
         $product = $this->preorderService->enablePreorder(
             productId: $id,
             availableDate: isset($request['available_date'])
-                ? Carbon::parse($request['available_date'])
+            ? Carbon::parse($request['available_date'])
                 : null,
             limit: $request['limit'] ?? null,
             message: $request['message'] ?? null,
@@ -253,10 +252,15 @@ class ProductController extends ApiController
      * Permet de supprimer plusieurs produits à la fois.
      * Les produits sont placés en corbeille et peuvent être restaurés.
      */
-    public function bulkDestroy(BulkDestroyProductsRequest $request): JsonResponse
+    public function bulkDestroy(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'required|string|exists:products,id'
+        ]);
+
         try {
-            $count = Product::whereIn('id', $request['ids'])->delete();
+            $count = Product::whereIn('id', $validated['ids'])->delete();
 
             return $this->successResponse(
                 ['deleted_count' => $count],
@@ -264,7 +268,7 @@ class ProductController extends ApiController
             );
         } catch (\Exception $e) {
             Log::error('Échec de la suppression en masse', [
-                'ids' => $request['ids'],
+                'ids' => $validated['ids'],
                 'error' => $e->getMessage()
             ]);
 
