@@ -38,7 +38,7 @@ Route::prefix('v1/admin')
             Route::post('{id}/toggle-active', [\Modules\Catalogue\Http\Controllers\Admin\CollectionController::class, 'toggleActive'])
                 ->name('toggle-active');
 
-            // ✅ NOUVEAU: Gestion des produits
+            // Gestion des produits
             Route::post('{id}/products/add', [\Modules\Catalogue\Http\Controllers\Admin\CollectionController::class, 'addProducts'])
                 ->name('products.add');
             Route::post('{id}/products/remove', [\Modules\Catalogue\Http\Controllers\Admin\CollectionController::class, 'removeProducts'])
@@ -171,13 +171,23 @@ Route::prefix('v1/admin')
         });
 
         // Promotion Management
+        Route::get('/promotions/statistics', [\Modules\Promotion\Http\Controllers\Admin\PromotionController::class, 'statistics'])->name('promotions.statistics');
+        Route::post('/promotions/bulk/destroy', [\Modules\Promotion\Http\Controllers\Admin\PromotionController::class, 'bulkDestroy'])->name('promotions.bulk.destroy');
+        Route::post('/promotions/bulk/restore', [\Modules\Promotion\Http\Controllers\Admin\PromotionController::class, 'bulkRestore'])->name('promotions.bulk.restore');
+        Route::post('/promotions/{id}/restore', [\Modules\Promotion\Http\Controllers\Admin\PromotionController::class, 'restore'])->name('promotions.restore');
         Route::apiResource('promotions', \Modules\Promotion\Http\Controllers\Admin\PromotionController::class);
-        Route::post('/promotions/{id}/deactivate', [\Modules\Promotion\Http\Controllers\Admin\PromotionController::class, 'deactivate'])->name('promotions.deactivate');
 
         // Review Management
+        Route::prefix('reviews')->name('reviews.')->group(function () {
+            Route::get('statistics', [\Modules\Reviews\Http\Controllers\Admin\ReviewController::class, 'statistics'])->name('statistics');
+            Route::post('bulk/approve', [\Modules\Reviews\Http\Controllers\Admin\ReviewController::class, 'bulkApprove'])->name('bulk.approve');
+            Route::post('bulk/reject', [\Modules\Reviews\Http\Controllers\Admin\ReviewController::class, 'bulkReject'])->name('bulk.reject');
+            Route::post('bulk/destroy', [\Modules\Reviews\Http\Controllers\Admin\ReviewController::class, 'bulkDestroy'])->name('bulk.destroy');
+            Route::post('{id}/restore', [\Modules\Reviews\Http\Controllers\Admin\ReviewController::class, 'restore'])->name('restore');
+        });
         Route::apiResource('reviews', \Modules\Reviews\Http\Controllers\Admin\ReviewController::class);
-        Route::post('/reviews/{id}/reject', [\Modules\Reviews\Http\Controllers\Admin\ReviewController::class, 'reject'])->name('reviews.reject');
         Route::post('/reviews/{id}/approve', [\Modules\Reviews\Http\Controllers\Admin\ReviewController::class, 'approve'])->name('reviews.approve');
+        Route::post('/reviews/{id}/reject', [\Modules\Reviews\Http\Controllers\Admin\ReviewController::class, 'reject'])->name('reviews.reject');
 
         // Shipping Management
         Route::apiResource('shipments', \Modules\Shipping\Http\Controllers\Admin\ShipmentController::class);
@@ -192,7 +202,8 @@ Route::prefix('v1/admin')
             Route::get('statistics', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'statistics'])->name('statistics');
             Route::get('out-of-stock', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'outOfStock'])->name('out-of-stock');
 
-            // Stock adjustments
+        // Stock adjustments
+            Route::get('', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'index'])->name('index');
             Route::post('adjust', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'adjust'])->name('adjust');
             Route::post('bulk-adjust', [\Modules\Inventory\Http\Controllers\Admin\InventoryController::class, 'bulk-adjust'])->name('bulk-adjust');
 

@@ -45,11 +45,11 @@ class Order extends BaseModel
         'shipping_address' => 'array',
         'billing_address' => 'array',
         'metadata' => 'array',
-        'subtotal' => 'decimal:2',
-        'discount_amount' => 'decimal:2',
-        'tax_amount' => 'decimal:2',
-        'shipping_amount' => 'decimal:2',
-        'total' => 'decimal:2',
+        'subtotal' => 'integer',
+        'discount_amount' => 'integer',
+        'tax_amount' => 'integer',
+        'shipping_amount' => 'integer',
+        'total' => 'integer',
     ];
 
     // Status constants
@@ -164,7 +164,7 @@ class Order extends BaseModel
         $prefix = 'ORD';
         $timestamp = now()->format('Ymd');
         $random = strtoupper(substr(uniqid(), -6));
-        
+
         return "{$prefix}-{$timestamp}-{$random}";
     }
 

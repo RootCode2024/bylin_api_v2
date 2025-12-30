@@ -31,7 +31,7 @@ class Shipment extends BaseModel
 
     protected $casts = [
         'tracking_events' => 'array',
-        'cost' => 'decimal:2',
+        'cost' => 'integer',
         'shipped_date' => 'date',
         'estimated_delivery_date' => 'date',
         'delivered_date' => 'date',
@@ -105,7 +105,7 @@ class Shipment extends BaseModel
     {
         $this->status = self::STATUS_SHIPPED;
         $this->shipped_date = now();
-        
+
         if ($trackingNumber) {
             $this->tracking_number = $trackingNumber;
         }

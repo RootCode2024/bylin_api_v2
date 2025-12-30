@@ -5,72 +5,200 @@ declare(strict_types=1);
 namespace Modules\Inventory\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Database\Eloquent\Model;
 use Modules\Catalogue\Models\Product;
-use Modules\Core\Services\BaseService;
-use Modules\Inventory\Models\StockMovement;
 use Modules\Catalogue\Models\ProductVariation;
+use Modules\Inventory\Models\StockMovement;
+use Modules\Inventory\Enums\StockOperation;
+use Modules\Inventory\Enums\StockReason;
 use Illuminate\Pagination\LengthAwarePaginator;
 
-class InventoryService extends BaseService
+class InventoryService
 {
-    /**
-     * Get low stock items
-     */
-    public function getLowStockItems(?int $threshold = null, int $perPage = 15): LengthAwarePaginator
+
+    public function adjustStock(array $data): array
     {
-        $query = Product::with(['brand', 'categories'])
-            ->where('track_inventory', true)
-            ->where('is_variable', false)
-            ->where(function ($q) use ($threshold) {
-                if ($threshold) {
-                    $q->where('stock_quantity', '<=', $threshold);
-                } else {
-                    $q->whereColumn('stock_quantity', '<=', 'low_stock_threshold');
+        Log::info('InventoryService::adjustStock START', [
+            'product_id' => $data['product_id'],
+            'reason' => $data['reason'],
+            'has_variations' => isset($data['variations'])
+        ]);
+
+        return DB::transaction(function () use ($data) {
+            $product = Product::withCount('variations')
+                ->lockForUpdate()
+                ->findOrFail($data['product_id']);
+
+            $results = [];
+            $reason = StockReason::from($data['reason']);
+
+            // PRODUIT VARIABLE
+            if ($product->variations_count > 0) {
+                if (empty($data['variations'])) {
+                    throw new \InvalidArgumentException(
+                        'Le produit possède des variations. Vous devez fournir le tableau "variations".'
+                    );
                 }
-            })
-            ->where('stock_quantity', '>', 0)
-            ->orderBy('stock_quantity', 'asc');
 
-        return $query->paginate($perPage);
+                foreach ($data['variations'] as $variationData) {
+                    $variation = ProductVariation::lockForUpdate()
+                        ->findOrFail($variationData['id']);
+
+                    // Sécurité : vérifier l'appartenance
+                    if ($variation->product_id !== $product->id) {
+                        throw new \InvalidArgumentException(
+                            "La variation {$variation->id} n'appartient pas au produit {$product->id}"
+                        );
+                    }
+
+                    $results[] = $this->performAdjustment(
+                        target: $variation,
+                        parentProduct: $product,
+                        quantity: (int) $variationData['quantity'],
+                        operation: StockOperation::from($variationData['operation']),
+                        reason: $reason,
+                        notes: $data['notes'] ?? null
+                    );
+                }
+
+                // Recalcul du stock total du parent
+                $totalStock = $product->variations()->sum('stock_quantity');
+                $product->update(['stock_quantity' => $totalStock]);
+
+                if (method_exists($product, 'updateStockStatus')) {
+                    $product->updateStockStatus();
+                }
+            }
+            // PRODUIT SIMPLE
+            else {
+                if (!isset($data['quantity']) || !isset($data['operation'])) {
+                    throw new \InvalidArgumentException(
+                        'Les champs "quantity" et "operation" sont requis pour un produit simple.'
+                    );
+                }
+
+                $results[] = $this->performAdjustment(
+                    target: $product,
+                    parentProduct: $product,
+                    quantity: (int) $data['quantity'],
+                    operation: StockOperation::from($data['operation']),
+                    reason: $reason,
+                    notes: $data['notes'] ?? null
+                );
+            }
+
+            Log::info('InventoryService::adjustStock SUCCESS', [
+                'movements_created' => count($results),
+                'product_id' => $product->id
+            ]);
+
+            return $results;
+        });
     }
 
-    /**
-     * Get out of stock items
-     */
-    public function getOutOfStockItems(int $perPage = 15): LengthAwarePaginator
+    private function performAdjustment(
+        Model $target,
+        Product $parentProduct,
+        int $quantity,
+        StockOperation $operation,
+        StockReason $reason,
+        ?string $notes
+    ): StockMovement {
+        $currentStock = (int) $target->stock_quantity;
+
+        // Calcul du nouveau stock
+        $newStock = match ($operation) {
+            StockOperation::SET => $quantity,
+            StockOperation::ADD => $currentStock + $quantity,
+            StockOperation::SUB => $currentStock - $quantity,
+        };
+
+        // Validation métier : stock négatif
+        if ($newStock < 0) {
+            throw new \DomainException(
+                "Stock insuffisant pour '{$target->sku}'. " .
+                    "Stock actuel: {$currentStock}, " .
+                    "opération: {$operation->value} {$quantity}, " .
+                    "résultat: {$newStock}"
+            );
+        }
+
+        // Validation métier : quantité > 0 pour add/sub
+        if (in_array($operation, [StockOperation::ADD, StockOperation::SUB]) && $quantity === 0) {
+            throw new \DomainException(
+                "La quantité doit être supérieure à 0 pour une opération d'ajout ou de retrait."
+            );
+        }
+
+        $delta = $newStock - $currentStock;
+
+        // Création du mouvement
+        $movement = StockMovement::create([
+            'product_id'      => $parentProduct->id,
+            'variation_id'    => $target instanceof ProductVariation ? $target->id : null,
+            'type'            => $this->getMovementType($delta),
+            'reason'          => $reason->value,
+            'quantity'        => $delta,
+            'quantity_before' => $currentStock,
+            'quantity_after'  => $newStock,
+            'notes'           => $notes,
+            'created_by'      => Auth::id(),
+        ]);
+
+        // Mise à jour du stock
+        $target->update(['stock_quantity' => $newStock]);
+
+        // Mise à jour du statut
+        if (method_exists($target, 'updateStockStatus')) {
+            $target->updateStockStatus();
+        }
+
+        Log::debug('Stock adjusted', [
+            'type' => get_class($target),
+            'id' => $target->id,
+            'sku' => $target->sku,
+            'before' => $currentStock,
+            'after' => $newStock,
+            'delta' => $delta,
+            'operation' => $operation->value
+        ]);
+
+        return $movement;
+    }
+
+    private function getMovementType(int $delta): string
     {
-        return Product::with(['brand', 'categories'])
-            ->where('track_inventory', true)
-            ->where('stock_quantity', '<=', 0)
-            ->orderBy('updated_at', 'desc')
-            ->paginate($perPage);
+        return match (true) {
+            $delta > 0 => 'in',
+            $delta < 0 => 'out',
+            default => 'adjustment',
+        };
     }
 
-    /**
-     * Get inventory movements
-     */
+    // --- MÉTHODES DE LECTURE ---
+
     public function getMovements(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        $query = StockMovement::with([
-            'product',
-            'variation',
-            'creator' // Using 'creator' relationship from your StockMovement model
-        ])->latest();
+        $query = StockMovement::query()
+            ->with(['product', 'variation', 'creator'])
+            ->latest('created_at');
 
         if (!empty($filters['product_id'])) {
-            $query->forProduct($filters['product_id']);
+            $query->where('product_id', $filters['product_id']);
         }
 
         if (!empty($filters['variation_id'])) {
-            $query->forVariation($filters['variation_id']);
+            $query->where('variation_id', $filters['variation_id']);
         }
 
         if (!empty($filters['type'])) {
-            $query->type($filters['type']);
+            $query->where('type', $filters['type']);
         }
 
         if (!empty($filters['reason'])) {
-            $query->reason($filters['reason']);
+            $query->where('reason', $filters['reason']);
         }
 
         if (!empty($filters['date_from'])) {
@@ -89,308 +217,228 @@ class InventoryService extends BaseService
     }
 
     /**
-     * Get inventory statistics
+     * Version standard avec plusieurs requêtes (plus lisible)
      */
     public function getStatistics(): array
     {
-        return [
-            'total_products' => Product::where('track_inventory', true)->count(),
-            'in_stock' => Product::where('track_inventory', true)
-                ->where('stock_quantity', '>', 0)
-                ->count(),
-            'out_of_stock' => Product::where('track_inventory', true)
-                ->where('stock_quantity', '<=', 0)
-                ->count(),
-            'low_stock' => Product::where('track_inventory', true)
-                ->whereColumn('stock_quantity', '<=', 'low_stock_threshold')
-                ->where('stock_quantity', '>', 0)
-                ->count(),
-            'total_stock_value' => $this->calculateTotalStockValue(),
-            'recent_movements_count' => StockMovement::whereDate('created_at', '>=', now()->subDays(7))
-                ->count(),
-            'movements_by_type' => [
-                'in' => StockMovement::stockIn()->whereDate('created_at', '>=', now()->subDays(30))->count(),
-                'out' => StockMovement::stockOut()->whereDate('created_at', '>=', now()->subDays(30))->count(),
-            ]
-        ];
-    }
+        // ========================================================================
+        // COMPTEURS DE BASE
+        // ========================================================================
 
-    /**
-     * Adjust stock using the existing StockMovement::createMovement method
-     */
-    public function adjustStock(
-        ?string $productId,
-        ?string $variationId,
-        int $quantity,
-        string $operation = 'set',
-        ?string $reason = null,
-        ?string $notes = null
-    ): array {
-        try {
-            // Validate that we have at least one ID
-            if (!$productId && !$variationId) {
-                return [
-                    'success' => false,
-                    'message' => 'Either product_id or variation_id is required'
-                ];
-            }
+        // Total de produits suivis (incluant les variables)
+        $totalProducts = Product::where('track_inventory', true)->count();
 
-            // If we only have variation_id, get the product_id
-            if (!$productId && $variationId) {
-                $variation = ProductVariation::findOrFail($variationId);
-                $productId = $variation->product_id;
-            }
+        // Total de variations (pour info)
+        $totalVariations = ProductVariation::whereHas('product', function ($q) {
+            $q->where('track_inventory', true);
+        })->count();
 
-            // Get current stock
-            if ($variationId) {
-                $variation = ProductVariation::findOrFail($variationId);
-                $currentStock = $variation->stock_quantity;
-            } else {
-                $product = Product::findOrFail($productId);
+        // ========================================================================
+        // STATUTS DE STOCK - CORRIGÉ
+        // ========================================================================
 
-                if ($product->is_variable) {
-                    return [
-                        'success' => false,
-                        'message' => 'Cannot adjust stock for variable products directly. Update variations instead.'
-                    ];
-                }
+        // ✅ CORRECTION : COUNT au lieu de SUM pour compter les produits
+        // Produits en rupture (stock = 0)
+        $outOfStockCount = Product::where('track_inventory', true)
+            ->where('stock_quantity', '=', 0)
+            ->count(); // ✅ COUNT
 
-                $currentStock = $product->stock_quantity;
-            }
+        // Produits en stock faible (0 < stock <= low_stock_threshold)
+        // ✅ CORRECTION : Utiliser le seuil personnalisé de chaque produit
+        $lowStockCount = Product::where('track_inventory', true)
+            ->where('stock_quantity', '>', 0)
+            ->whereRaw('stock_quantity <= COALESCE(low_stock_threshold, 10)')
+            ->count(); // ✅ COUNT
 
-            // Calculate final quantity based on operation
-            $finalQuantity = match ($operation) {
-                'set' => $quantity,
-                'add' => $currentStock + $quantity,
-                'sub' => $currentStock - $quantity,
-                default => $currentStock
-            };
+        // ✅ CORRECTION : Produits en stock (pas en rupture, pas en stock faible)
+        $totalItemsInStock = Product::where('track_inventory', true)
+            ->where('stock_quantity', '>', 0)
+            ->whereRaw('stock_quantity > COALESCE(low_stock_threshold, 10)')
+            ->count(); // ✅ COUNT au lieu de SUM
 
-            // Prevent negative stock
-            if ($finalQuantity < 0) {
-                return [
-                    'success' => false,
-                    'message' => 'Stock quantity cannot be negative'
-                ];
-            }
-
-            // Determine movement type based on operation and reason
-            $movementType = $this->determineMovementType($operation, $reason, $currentStock, $finalQuantity);
-            $movementReason = $this->mapReasonToStockMovementReason($reason);
-
-            // Use the existing StockMovement::createMovement method
-            $movement = StockMovement::createMovement([
-                'product_id' => $productId,
-                'variation_id' => $variationId,
-                'type' => $movementType,
-                'reason' => $movementReason,
-                'quantity' => $finalQuantity - $currentStock, // The change amount
-                'notes' => $notes,
-                'created_by' => auth()->id(),
-            ]);
-
-            // Get the updated entity
-            if ($variationId) {
-                $data = ProductVariation::findOrFail($variationId);
-            } else {
-                $data = Product::findOrFail($productId);
-            }
-
-            return [
-                'success' => true,
-                'data' => $data,
-                'movement' => $movement
-            ];
-        } catch (\Exception $e) {
-            return [
-                'success' => false,
-                'message' => $e->getMessage()
-            ];
-        }
-    }
-
-    /**
-     * Bulk adjust stock
-     */
-    public function bulkAdjustStock(array $adjustments): array
-    {
-        $results = [
-            'success_count' => 0,
-            'failed_count' => 0,
-            'errors' => []
-        ];
-
-        foreach ($adjustments as $index => $adjustment) {
-            try {
-                $result = $this->adjustStock(
-                    productId: $adjustment['product_id'] ?? null,
-                    variationId: $adjustment['variation_id'] ?? null,
-                    quantity: $adjustment['quantity'],
-                    operation: $adjustment['operation'],
-                    reason: $adjustment['reason'] ?? null,
-                    notes: $adjustment['notes'] ?? null
-                );
-
-                if ($result['success']) {
-                    $results['success_count']++;
-                } else {
-                    $results['failed_count']++;
-                    $results['errors'][] = [
-                        'index' => $index,
-                        'message' => $result['message']
-                    ];
-                }
-            } catch (\Exception $e) {
-                $results['failed_count']++;
-                $results['errors'][] = [
-                    'index' => $index,
-                    'message' => $e->getMessage()
-                ];
-            }
-        }
-
-        return $results;
-    }
-
-    /**
-     * Export inventory data
-     */
-    public function export(array $filters = [], string $format = 'csv'): string
-    {
-        $query = Product::with(['brand', 'categories'])
-            ->where('track_inventory', true);
-
-        if (!empty($filters['status'])) {
-            $query->where('status', $filters['status']);
-        }
-
-        if (!empty($filters['brand_id'])) {
-            $query->where('brand_id', $filters['brand_id']);
-        }
-
-        if (!empty($filters['category_id'])) {
-            $query->whereHas('categories', function ($q) use ($filters) {
-                $q->where('categories.id', $filters['category_id']);
-            });
-        }
-
-        if (!empty($filters['low_stock_only'])) {
-            $query->whereColumn('stock_quantity', '<=', 'low_stock_threshold');
-        }
-
-        $products = $query->get();
-
-        // Generate file
-        $fileName = 'inventory_' . now()->format('d/m/Y_His') . '.' . $format;
-
-        // Ensure directory exists
-        $exportDir = storage_path('app/public/exports');
-        if (!file_exists($exportDir)) {
-            mkdir($exportDir, 0755, true);
-        }
-
-        $filePath = $exportDir . '/' . $fileName;
-
-        if ($format === 'csv') {
-            $this->generateCsv($products, $filePath);
-        }
-
-        return 'storage/exports/' . $fileName;
-    }
-
-    /**
-     * Determine movement type based on operation and reason
-     */
-    private function determineMovementType(string $operation, ?string $reason, int $oldQty, int $newQty): string
-    {
-        // If explicit reason is provided
-        if ($reason === 'sale' || $reason === 'damage' || $reason === 'theft') {
-            return StockMovement::TYPE_OUT;
-        }
-
-        if ($reason === 'purchase' || $reason === 'return') {
-            return StockMovement::TYPE_IN;
-        }
-
-        // Otherwise, determine by operation
-        if ($operation === 'set') {
-            return StockMovement::TYPE_ADJUSTMENT;
-        }
-
-        return match ($operation) {
-            'add' => StockMovement::TYPE_IN,
-            'sub' => StockMovement::TYPE_OUT,
-            default => StockMovement::TYPE_ADJUSTMENT
-        };
-    }
-
-    /**
-     * Map API reason to StockMovement reason constants
-     */
-    private function mapReasonToStockMovementReason(?string $reason): string
-    {
-        if (!$reason) {
-            return StockMovement::REASON_ADJUSTMENT;
-        }
-
-        return match ($reason) {
-            'initial_stock' => StockMovement::REASON_INITIAL_STOCK,
-            'purchase' => StockMovement::REASON_PURCHASE,
-            'sale' => StockMovement::REASON_SALE,
-            'return' => StockMovement::REASON_RETURN,
-            'damage' => StockMovement::REASON_DAMAGED,
-            'theft' => StockMovement::REASON_LOST,
-            'adjustment' => StockMovement::REASON_ADJUSTMENT,
-            'transfer' => StockMovement::REASON_ADJUSTMENT,
-            default => StockMovement::REASON_ADJUSTMENT
-        };
-    }
-
-    /**
-     * Calculate total stock value
-     */
-    private function calculateTotalStockValue(): float
-    {
-        $total = Product::where('track_inventory', true)
-            ->selectRaw('SUM(stock_quantity * price) as total')
-            ->value('total');
-
-        return (float) ($total ?? 0);
-    }
-
-    /**
-     * Generate CSV file
-     */
-    private function generateCsv($products, string $filePath): void
-    {
-        $fp = fopen($filePath, 'w');
-
-        // Headers
-        fputcsv($fp, [
-            'SKU',
-            'Name',
-            'Brand',
-            'Stock Quantity',
-            'Low Stock Threshold',
-            'Status',
-            'Price',
-            'Last Updated'
+        Log::info('Stock counts', [
+            'total_products' => $totalProducts,
+            'in_stock' => $totalItemsInStock,
+            'low_stock' => $lowStockCount,
+            'out_of_stock' => $outOfStockCount
         ]);
 
-        // Data
-        foreach ($products as $product) {
-            fputcsv($fp, [
-                $product->sku,
-                $product->name,
-                $product->brand?->name ?? 'N/A',
-                $product->stock_quantity,
-                $product->low_stock_threshold,
-                $product->stock_quantity > 0 ? 'In Stock' : 'Out of Stock',
-                number_format($product->price / 100, 2), // Assuming price in cents
-                $product->updated_at->format('d/m/Y H:i:s')
-            ]);
-        }
+        // ========================================================================
+        // VALEUR DU STOCK (ici on garde SUM car on veut la valeur totale)
+        // ========================================================================
 
-        fclose($fp);
+        // Valeur totale du stock (products uniquement, les variations sont déjà agrégées)
+        $totalStockValue = Product::where('track_inventory', true)
+            ->selectRaw('SUM(stock_quantity * COALESCE(cost_price, price, 0)) as total_value')
+            ->value('total_value') ?? 0;
+
+        // ✅ CORRECTION : Convertir en float avant round (PostgreSQL retourne une string)
+        $totalStockValue = round((float) $totalStockValue, 2);
+
+        // ========================================================================
+        // MOUVEMENTS - COMPTEURS GLOBAUX
+        // ========================================================================
+
+        $movementsToday = StockMovement::whereDate('created_at', today())->count();
+
+        $movementsThisWeek = StockMovement::whereBetween('created_at', [
+            now()->startOfWeek(),
+            now()->endOfWeek()
+        ])->count();
+
+        $movementsThisMonth = StockMovement::whereYear('created_at', now()->year)
+            ->whereMonth('created_at', now()->month)
+            ->count();
+
+        // ========================================================================
+        // MOUVEMENTS - ENTRÉES VS SORTIES
+        // ========================================================================
+
+        // Aujourd'hui
+        $stockInToday = StockMovement::whereDate('created_at', today())
+            ->where('type', StockMovement::TYPE_IN)
+            ->sum('quantity');
+
+        $stockOutToday = StockMovement::whereDate('created_at', today())
+            ->where('type', StockMovement::TYPE_OUT)
+            ->sum('quantity');
+
+        // Cette semaine
+        $stockInThisWeek = StockMovement::whereBetween('created_at', [
+            now()->startOfWeek(),
+            now()->endOfWeek()
+        ])
+            ->where('type', StockMovement::TYPE_IN)
+            ->sum('quantity');
+
+        $stockOutThisWeek = StockMovement::whereBetween('created_at', [
+            now()->startOfWeek(),
+            now()->endOfWeek()
+        ])
+            ->where('type', StockMovement::TYPE_OUT)
+            ->sum('quantity');
+
+        // ========================================================================
+        // RETOUR FINAL
+        // ========================================================================
+
+        return [
+            'total_products' => $totalProducts,
+            'total_variations' => $totalVariations,
+            'total_stock_value' => $totalStockValue,
+            'low_stock_count' => $lowStockCount,
+            'out_of_stock_count' => $outOfStockCount,
+            'total_items_in_stock' => $totalItemsInStock,
+            'movements_today' => $movementsToday,
+            'movements_this_week' => $movementsThisWeek,
+            'movements_this_month' => $movementsThisMonth,
+            // ✅ CORRECTION : Convertir en int et abs (PostgreSQL peut retourner des strings)
+            'stock_in_today' => (int) abs((float) $stockInToday),
+            'stock_out_today' => (int) abs((float) $stockOutToday),
+            'stock_in_this_week' => (int) abs((float) $stockInThisWeek),
+            'stock_out_this_week' => (int) abs((float) $stockOutThisWeek),
+        ];
+    }
+
+    /**
+     * Version ultra-optimisée avec une seule requête SQL (RECOMMANDÉ)
+     * Beaucoup plus rapide pour les gros volumes
+     */
+    public function getStatisticsOptimized(): array
+    {
+        // Une seule requête pour tous les compteurs de stock
+        $stockStats = DB::selectOne("
+        SELECT
+            COUNT(*) as total_products,
+            COUNT(*) FILTER (WHERE stock_quantity = 0) as out_of_stock,
+            COUNT(*) FILTER (WHERE stock_quantity > 0 AND stock_quantity <= COALESCE(low_stock_threshold, 10)) as low_stock,
+            COUNT(*) FILTER (WHERE stock_quantity > 0 AND stock_quantity > COALESCE(low_stock_threshold, 10)) as in_stock,
+            COALESCE(SUM(stock_quantity * COALESCE(cost_price, price, 0)), 0) as stock_value
+        FROM products
+        WHERE track_inventory = true
+        AND deleted_at IS NULL
+    ");
+
+        // Total de variations
+        $totalVariations = ProductVariation::whereHas('product', function ($q) {
+            $q->where('track_inventory', true);
+        })->count();
+
+        // Mouvements (requête unifiée)
+        $movements = DB::select("
+        SELECT
+            CASE
+                WHEN created_at >= ? THEN 'today'
+                WHEN created_at >= ? THEN 'week'
+                ELSE 'month'
+            END as period,
+            type,
+            COUNT(*) as movement_count,
+            SUM(ABS(quantity)) as total_quantity
+        FROM stock_movements
+        WHERE created_at >= ?
+        GROUP BY period, type
+    ", [
+            today()->toDateTimeString(),
+            now()->startOfWeek()->toDateTimeString(),
+            now()->startOfMonth()->toDateTimeString()
+        ]);
+
+        $movementStats = collect($movements);
+
+        return [
+            'total_products' => (int) $stockStats->total_products,
+            'total_variations' => $totalVariations,
+            'total_stock_value' => round((float) $stockStats->stock_value, 2),
+            'low_stock_count' => (int) $stockStats->low_stock,
+            'out_of_stock_count' => (int) $stockStats->out_of_stock,
+            'total_items_in_stock' => (int) $stockStats->in_stock,
+
+            'movements_today' => (int) $movementStats->where('period', 'today')->sum('movement_count'),
+            'movements_this_week' => (int) $movementStats->whereIn('period', ['today', 'week'])->sum('movement_count'),
+            'movements_this_month' => (int) $movementStats->sum('movement_count'),
+
+            'stock_in_today' => (int) $movementStats->where('period', 'today')->where('type', 'in')->sum('total_quantity'),
+            'stock_out_today' => (int) $movementStats->where('period', 'today')->where('type', 'out')->sum('total_quantity'),
+            'stock_in_this_week' => (int) $movementStats->whereIn('period', ['today', 'week'])->where('type', 'in')->sum('total_quantity'),
+            'stock_out_this_week' => (int) $movementStats->whereIn('period', ['today', 'week'])->where('type', 'out')->sum('total_quantity'),
+        ];
+    }
+
+    // ========================================================================
+    // MÉTHODES DE LECTURE - SIMPLIFIÉES
+    // ========================================================================
+
+    /**
+     * Récupère les produits en stock faible (0 < stock < 10)
+     */
+    public function getLowStockItems(?int $threshold = null, int $perPage = 15)
+    {
+        $threshold = $threshold ?? 10;
+
+        return Product::where('track_inventory', true)
+            ->where('stock_quantity', '>', 0)
+            ->where('stock_quantity', '<', $threshold)
+            ->with(['brand', 'categories', 'media'])
+            ->orderBy('stock_quantity', 'asc')
+            ->paginate($perPage);
+    }
+
+    /**
+     * Récupère les produits en rupture (stock = 0)
+     */
+    public function getOutOfStockItems(int $perPage = 15)
+    {
+        return Product::where('track_inventory', true)
+            ->where('stock_quantity', '=', 0)
+            ->with(['brand', 'categories', 'media'])
+            ->orderBy('updated_at', 'desc')
+            ->paginate($perPage);
+    }
+
+    public function export(array $filters = [], string $format = 'csv'): string
+    {
+        // TODO: Implémenter l'export selon vos besoins
+        throw new \BadMethodCallException('Export not implemented yet');
     }
 }

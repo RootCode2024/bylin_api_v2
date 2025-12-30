@@ -15,6 +15,12 @@ return new class extends Migration
         Schema::create('product_authenticity_codes', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('product_id');
+            $table->foreignUuid('collection_id')
+                ->nullable()
+                ->after('product_id')
+                ->constrained('collections')
+                ->nullOnDelete()
+                ->comment('Lien vers la collection pour tracking');
             $table->string('qr_code', 100)->unique(); // Unique QR code
             $table->string('serial_number', 50)->unique()->nullable(); // Optional serial number
             $table->boolean('is_authentic')->default(true);
@@ -33,18 +39,11 @@ return new class extends Migration
             $table->foreign('purchased_by')->references('id')->on('customers')->onDelete('set null');
             $table->foreign('order_id')->references('id')->on('orders')->onDelete('set null');
 
+            $table->index('collection_id');
             $table->index('qr_code');
             $table->index('serial_number');
             $table->index('product_id');
             $table->index('is_authentic');
-        });
-
-        // Add flag to products table to identify Bylin brand products
-        Schema::table('products', function (Blueprint $table) {
-            $table->boolean('requires_authenticity')->default(false)->after('is_preorder_enabled');
-            $table->integer('authenticity_codes_count')->default(0)->after('requires_authenticity');
-            
-            $table->index('requires_authenticity');
         });
 
         // Create scan history for detailed tracking
@@ -73,12 +72,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('authenticity_scan_logs');
-
-        Schema::table('products', function (Blueprint $table) {
-            $table->dropIndex(['requires_authenticity']);
-            $table->dropColumn('requires_authenticity');
-        });
-
         Schema::dropIfExists('product_authenticity_codes');
     }
 };

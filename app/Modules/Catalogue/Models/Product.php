@@ -7,6 +7,7 @@ namespace Modules\Catalogue\Models;
 use Spatie\MediaLibrary\HasMedia;
 use Modules\Core\Models\BaseModel;
 use Modules\Core\Traits\HasStatus;
+use Modules\Reviews\Models\Review;
 use Modules\Catalogue\Models\Brand;
 use Modules\Core\Traits\Searchable;
 use Modules\Catalogue\Models\Collection;
@@ -95,9 +96,9 @@ class Product extends BaseModel implements HasMedia
             'requires_authenticity' => 'boolean',
             'authenticity_codes_count' => 'integer',
 
-            'price' => 'decimal:2',
-            'compare_price' => 'decimal:2',
-            'cost_price' => 'decimal:2',
+            'price' => 'integer',
+            'compare_price' => 'integer',
+            'cost_price' => 'integer',
 
             'weight' => 'decimal:2',
             'dimensions' => 'array',
@@ -132,6 +133,29 @@ class Product extends BaseModel implements HasMedia
     public function collection(): BelongsTo
     {
         return $this->belongsTo(Collection::class);
+    }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(Review::class);
+    }
+
+    public function updateAverageRating(): void
+    {
+        $stats = $this->reviews()
+            ->where('status', Review::STATUS_APPROVED)
+            ->selectRaw('COUNT(*) as count, AVG(rating) as average')
+            ->first();
+
+        $this->rating_count = (int) ($stats->count ?? 0);
+
+        $average = $stats->average !== null
+            ? (float) $stats->average
+            : 0.0;
+
+        $this->rating_average = round($average, 2);
+
+        $this->saveQuietly();
     }
 
     public function authenticityCodes(): HasMany
@@ -210,6 +234,26 @@ class Product extends BaseModel implements HasMedia
         if ($this->compare_price && $this->compare_price > $this->price) return round((($this->compare_price - $this->price) / $this->compare_price) * 100, 2);
 
         return null;
+    }
+
+    public function updateStockStatus(): void
+    {
+        // Si on ne suit pas l'inventaire, on ne change rien
+        if (!$this->track_inventory) {
+            return;
+        }
+
+        $oldStatus = $this->status;
+
+        if ($this->stock_quantity <= 0) {
+            $this->status = ProductStatus::OUT_OF_STOCK; // Assurez-vous que cet Enum est bien importé ou utilisez la string correspondante
+        } elseif ($this->stock_quantity > 0 && $this->status === ProductStatus::OUT_OF_STOCK) {
+            $this->status = ProductStatus::ACTIVE;
+        }
+
+        if ($oldStatus !== $this->status) {
+            $this->saveQuietly();
+        }
     }
 
     public function scopeActive($query)

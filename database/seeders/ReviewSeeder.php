@@ -19,15 +19,23 @@ class ReviewSeeder extends Seeder
             return;
         }
 
-        // Create 100 Reviews
         for ($i = 0; $i < 100; $i++) {
+
+            if ($i < 50) {
+                $status = 'approved';
+            } elseif ($i < 90) {
+                $status = 'pending';
+            } else {
+                $status = 'rejected';
+            }
+
             Review::create([
                 'customer_id' => $customers->random()->id,
                 'product_id' => $products->random()->id,
                 'rating' => $faker->numberBetween(3, 5),
                 'title' => $faker->sentence(3),
                 'comment' => $faker->paragraph(2),
-                'status' => 'approved',
+                'status' => $status,
                 'is_verified_purchase' => $faker->boolean(70),
             ]);
         }

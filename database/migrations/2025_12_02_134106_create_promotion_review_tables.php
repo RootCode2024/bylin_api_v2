@@ -16,13 +16,13 @@ return new class extends Migration
             $table->string('name');
             $table->string('code')->unique()->nullable(); // Coupon code if applicable
             $table->text('description')->nullable();
-            $table->string('type')->default('percentage'); // percentage, fixed, buy_x_get_y
-            $table->decimal('value', 12, 2); // Percentage or fixed amount
-            $table->decimal('min_purchase_amount', 12, 2)->nullable();
-            $table->decimal('max_discount_amount', 12, 2)->nullable();
-            $table->integer('usage_limit')->nullable(); // Total usage limit
-            $table->integer('usage_limit_per_customer')->default(1);
-            $table->integer('usage_count')->default(0);
+            $table->string('type')->default('percentage'); // percentage, fixed_amount or buy_x_get_y
+            $table->unsignedBigInteger('value');
+            $table->unsignedBigInteger('min_purchase_amount')->nullable();
+            $table->unsignedBigInteger('max_discount_amount')->nullable();
+            $table->unsignedBigInteger('usage_limit')->nullable(); // Total usage limit
+            $table->unsignedBigInteger('usage_limit_per_customer')->default(1);
+            $table->unsignedBigInteger('usage_count')->default(0);
             $table->boolean('is_active')->default(true);
             $table->timestamp('starts_at')->nullable();
             $table->timestamp('expires_at')->nullable();
@@ -42,7 +42,7 @@ return new class extends Migration
             $table->uuid('promotion_id');
             $table->uuid('customer_id')->nullable();
             $table->uuid('order_id')->nullable();
-            $table->decimal('discount_amount', 10, 2);
+            $table->unsignedBigInteger('discount_amount')->default(0);
             $table->timestamps();
 
             $table->foreign('promotion_id')->references('id')->on('promotions')->onDelete('cascade');
@@ -82,6 +82,7 @@ return new class extends Migration
             $table->string('media_path');
             $table->integer('sort_order')->default(0);
             $table->timestamps();
+            $table->softDeletes();
 
             $table->foreign('review_id')->references('id')->on('reviews')->onDelete('cascade');
             $table->index('review_id');

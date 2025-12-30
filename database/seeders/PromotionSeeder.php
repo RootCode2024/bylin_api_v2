@@ -10,7 +10,6 @@ class PromotionSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. Coupon: WELCOME10
         Promotion::create([
             'name' => 'Bienvenue 10%',
             'code' => 'WELCOME10',
@@ -20,11 +19,10 @@ class PromotionSeeder extends Seeder
             'min_purchase_amount' => 0,
             'is_active' => true,
             'starts_at' => now(),
-            'expires_at' => null, // Forever
+            'expires_at' => null,
             'usage_limit' => 1000,
         ]);
 
-        // 2. Coupon: NOEL2025
         Promotion::create([
             'name' => 'Noël 2025',
             'code' => 'NOEL2025',
@@ -38,7 +36,6 @@ class PromotionSeeder extends Seeder
             'usage_limit' => 500,
         ]);
 
-        // 3. Fixed Amount: MISEAJOUR
         Promotion::create([
             'name' => 'Réduction 5000F',
             'code' => 'MISEAJOUR',
@@ -51,13 +48,11 @@ class PromotionSeeder extends Seeder
             'expires_at' => now()->addMonth(),
         ]);
 
-        // 4. Category Discounts (simulated fields assuming promotion model structure)
-        // Usually automatic promotions map to rules, simulating basic usage here
         $category = Category::where('slug', 'homme-vetements')->first();
         if ($category) {
             Promotion::create([
                 'name' => 'Promo Homme (Auto)',
-                'code' => null, // Automatic promo
+                'code' => null,
                 'description' => '15% sur les vêtements homme.',
                 'type' => 'percentage',
                 'value' => 15,

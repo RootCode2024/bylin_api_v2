@@ -30,7 +30,7 @@ class Payment extends BaseModel
     ];
 
     protected $casts = [
-        'amount' => 'decimal:2',
+        'amount' => 'integer',
         'gateway_response' => 'array',
         'metadata' => 'array',
         'paid_at' => 'datetime',
@@ -127,7 +127,7 @@ class Payment extends BaseModel
      */
     public function canBeRefunded(): bool
     {
-        return $this->status === self::STATUS_COMPLETED 
+        return $this->status === self::STATUS_COMPLETED
             && $this->getTotalRefundedAmount() < $this->amount;
     }
 
@@ -156,11 +156,11 @@ class Payment extends BaseModel
     {
         $this->status = self::STATUS_COMPLETED;
         $this->paid_at = now();
-        
+
         if ($transactionId) {
             $this->transaction_id = $transactionId;
         }
-        
+
         $this->save();
 
         // Update order payment status
@@ -175,13 +175,13 @@ class Payment extends BaseModel
     public function markAsFailed(?string $reason = null): self
     {
         $this->status = self::STATUS_FAILED;
-        
+
         if ($reason) {
             $metadata = $this->metadata ?? [];
             $metadata['failure_reason'] = $reason;
             $this->metadata = $metadata;
         }
-        
+
         $this->save();
 
         // Update order payment status

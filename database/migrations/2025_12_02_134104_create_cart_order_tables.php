@@ -13,22 +13,34 @@ return new class extends Migration
     {
         Schema::create('carts', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->uuid('customer_id')->nullable(); // null for guest carts
-            $table->string('session_id')->nullable(); // for guest carts
+            $table->uuid('customer_id')->nullable();
+            $table->string('session_id')->nullable();
             $table->string('coupon_code')->nullable();
-            $table->decimal('discount_amount', 10, 2)->default(0);
-            $table->decimal('subtotal', 12, 2)->default(0);
-            $table->decimal('tax_amount', 10, 2)->default(0);
-            $table->decimal('shipping_amount', 10, 2)->default(0);
-            $table->decimal('total', 12, 2)->default(0);
-            $table->json('metadata')->nullable(); // Extra cart data
+            $table->unsignedBigInteger('discount_amount')->default(0);
+            $table->unsignedBigInteger('subtotal')->default(0);
+            $table->unsignedBigInteger('tax_amount')->default(0);
+            $table->unsignedBigInteger('shipping_amount')->default(0);
+            $table->unsignedBigInteger('total')->default(0);
+            $table->boolean('is_gift_cart')->default(false)->after('total');
+            $table->string('gift_cart_token', 50)->unique()->nullable();
+            $table->string('gift_cart_status', 20)->nullable();
+            $table->unsignedBigInteger('gift_cart_target_amount')->nullable();
+            $table->unsignedBigInteger('gift_cart_paid_amount')->default(0);
+            $table->uuid('gift_cart_owner_id')->nullable();
+            $table->text('gift_cart_message')->nullable();
+            $table->timestamp('gift_cart_expires_at')->nullable();
+            $table->json('metadata')->nullable();
             $table->timestamp('expires_at')->nullable();
             $table->timestamps();
 
             $table->foreign('customer_id')->references('id')->on('customers')->onDelete('cascade');
+            $table->foreign('gift_cart_owner_id')->references('id')->on('customers')->onDelete('set null');
             $table->index('customer_id');
             $table->index('session_id');
             $table->index('expires_at');
+            $table->index('gift_cart_token');
+            $table->index('gift_cart_status');
+            $table->index('gift_cart_expires_at');
         });
 
         Schema::create('cart_items', function (Blueprint $table) {
@@ -37,15 +49,18 @@ return new class extends Migration
             $table->uuid('product_id');
             $table->uuid('variation_id')->nullable();
             $table->integer('quantity');
-            $table->decimal('price', 12, 2); // Price snapshot at time of adding
-            $table->decimal('subtotal', 12, 2);
-            $table->json('options')->nullable(); // Custom options if any
+            $table->unsignedBigInteger('price');
+            $table->unsignedBigInteger('subtotal');
+            $table->boolean('is_preorder')->default(false);
+            $table->date('expected_availability_date')->nullable();
+            $table->json('options')->nullable();
             $table->timestamps();
 
             $table->foreign('cart_id')->references('id')->on('carts')->onDelete('cascade');
             $table->foreign('product_id')->references('id')->on('products')->onDelete('cascade');
             $table->foreign('variation_id')->references('id')->on('product_variations')->onDelete('set null');
             $table->index('cart_id');
+            $table->index('is_preorder');
         });
 
         Schema::create('orders', function (Blueprint $table) {
@@ -55,29 +70,28 @@ return new class extends Migration
             $table->string('status')->default('pending');
             $table->string('payment_status')->default('pending');
             $table->string('payment_method')->nullable();
-            
+
             // Customer info snapshot
             $table->string('customer_email');
             $table->string('customer_phone');
-            
+
             // Addresses
             $table->json('shipping_address');
             $table->json('billing_address');
-            
+
             // Amounts
-            $table->decimal('subtotal', 12, 2);
-            $table->decimal('discount_amount', 10, 2)->default(0);
-            $table->decimal('tax_amount', 10, 2)->default(0);
-            $table->decimal('shipping_amount', 10, 2)->default(0);
-            $table->decimal('total', 12, 2);
-            
+            $table->unsignedBigInteger('subtotal')->default(0);
+            $table->unsignedBigInteger('discount_amount')->default(0);
+            $table->unsignedBigInteger('tax_amount')->default(0);
+            $table->unsignedBigInteger('shipping_amount')->default(0);
+            $table->unsignedBigInteger('total')->default(0);
             // Coupon
             $table->string('coupon_code')->nullable();
-            
+
             // Notes
             $table->text('customer_note')->nullable();
             $table->text('admin_note')->nullable();
-            
+
             $table->json('metadata')->nullable();
             $table->timestamps();
             $table->softDeletes();
@@ -95,24 +109,30 @@ return new class extends Migration
             $table->uuid('order_id');
             $table->uuid('product_id');
             $table->uuid('variation_id')->nullable();
-            
+
             // Product snapshot
             $table->string('product_name');
             $table->string('product_sku');
             $table->string('variation_name')->nullable();
-            
+
             $table->integer('quantity');
-            $table->decimal('price', 12, 2);
-            $table->decimal('subtotal', 12, 2);
-            $table->decimal('discount_amount', 10, 2)->default(0);
-            $table->decimal('total', 12, 2);
-            
+            $table->unsignedBigInteger('price');
+            $table->unsignedBigInteger('subtotal')->default(0);
+            $table->unsignedBigInteger('discount_amount')->default(0);
+            $table->unsignedBigInteger('total')->default(0);
+
+            $table->boolean('is_preorder')->default(false);
+            $table->date('expected_availability_date')->nullable();
+            $table->string('preorder_status')->nullable();
+
             $table->json('options')->nullable();
             $table->timestamps();
 
             $table->foreign('order_id')->references('id')->on('orders')->onDelete('cascade');
             $table->foreign('product_id')->references('id')->on('products')->onDelete('restrict');
             $table->index('order_id');
+            $table->index('is_preorder');
+            $table->index('preorder_status');
         });
 
         Schema::create('order_status_histories', function (Blueprint $table) {
