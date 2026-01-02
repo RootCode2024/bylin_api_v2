@@ -55,10 +55,11 @@ class AuthController extends ApiController
         // Regenerate session to prevent fixation
         $request->session()->regenerate();
 
-        return response()->json([
-            'user' => $user->load('roles.permissions'),
-            'two_factor' => false, // Pour future implementation 2FA
-        ]);
+        // ✅ Pour nuxt-auth-sanctum : retourner directement l'objet user
+        // (sans wrapper successResponse)
+        return response()->json(
+            $user->load('roles.permissions')
+        );
     }
 
     /**
@@ -79,9 +80,10 @@ class AuthController extends ApiController
         Auth::guard('web')->login($user);
         $request->session()->regenerate();
 
-        return $this->createdResponse([
-            'user' => $user,
-        ], 'User registered and logged in successfully');
+        // ✅ Pour nuxt-auth-sanctum : retourner directement l'objet user
+        return response()->json(
+            $user->load('roles.permissions')
+        );
     }
 
     /**
@@ -98,22 +100,25 @@ class AuthController extends ApiController
     }
 
     /**
-     * Get authenticated user
+     * Get authenticated user (for nuxt-auth-sanctum)
+     * ✅ CORRECTION : Retourner directement l'objet sans wrapper
      */
     public function me(Request $request): JsonResponse
     {
-        return response()->json([
+        return response()->json(
             $request->user()->load('roles.permissions')
-        ]);
+        );
     }
 
     /**
-     * Refresh user data (no token refresh needed with cookies)
+     * Refresh user data (alternative endpoint avec successResponse)
+     * Ce endpoint peut être utilisé par d'autres parties de votre app
      */
     public function refresh(Request $request): JsonResponse
     {
         return $this->successResponse(
-            $request->user()->fresh()->load('roles.permissions')
+            $request->user()->fresh()->load('roles.permissions'),
+            'User data refreshed'
         );
     }
 }

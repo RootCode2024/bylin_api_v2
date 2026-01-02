@@ -21,6 +21,19 @@ Route::prefix('v1/admin')
         // Management Utilisateurs
         Route::apiResource('users', \Modules\User\Http\Controllers\UserController::class);
 
+        Route::prefix('users')->name('users.')->group(function () {
+            Route::get('/super-admins/count', [\Modules\User\Http\Controllers\UserController::class, 'countSuperAdmins'])->name('super-admins.count');
+        });
+
+        // Profile management
+        Route::prefix('profile')->name('profile.')->group(function () {
+            Route::get('/', [\Modules\User\Http\Controllers\ProfileController::class, 'show'])->name('show');
+            Route::put('/', [\Modules\User\Http\Controllers\ProfileController::class, 'update'])->name('update');
+            Route::post('/avatar', [\Modules\User\Http\Controllers\ProfileController::class, 'uploadAvatar'])->name('avatar.upload');
+            Route::delete('/avatar', [\Modules\User\Http\Controllers\ProfileController::class, 'deleteAvatar'])->name('avatar.delete');
+            Route::post('/change-password', [\Modules\User\Http\Controllers\ProfileController::class, 'changePassword'])->name('password.change');
+        });
+
         Route::prefix('authenticity')->name('authenticity.')->group(function () {
             Route::post('/generate', [\Modules\Catalogue\Http\Controllers\AuthenticityController::class, 'generate'])->name('generate');
             Route::get('/analytics', [\Modules\Catalogue\Http\Controllers\AuthenticityController::class, 'analytics'])->name('analytics');
@@ -168,6 +181,50 @@ Route::prefix('v1/admin')
 
             // Statistics
             Route::get('statistics', [\Modules\Customer\Http\Controllers\Admin\CustomerController::class, 'statistics'])->name('statistics');
+        });
+
+        Route::prefix('settings')->name('settings.')->group(function () {
+            // ========================================================================
+            // MEMBERS STATISTICS
+            // ========================================================================
+            Route::get('members/statistics', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'statistics'])->name('members.statistics');
+
+            // ========================================================================
+            // MEMBERS MANAGEMENT
+            // ========================================================================
+            Route::prefix('members')->name('members.')->group(function () {
+                // CRUD de base
+                Route::get('', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'index'])->name('index');
+                Route::post('', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'store'])->name('store');
+
+                // Détail et opérations sur un membre spécifique
+                Route::prefix('{member}')->group(function () {
+                    Route::get('', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'show'])->name('show');
+                    Route::put('', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'update'])->name('update');
+                    Route::delete('', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'destroy'])->name('destroy');
+                    Route::patch('role', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'updateRole'])->name('update-role');
+                    Route::patch('status', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'updateStatus'])->name('update-status');
+                });
+            });
+
+            // ========================================================================
+            // INVITATIONS
+            // ========================================================================
+
+            Route::prefix('invitations')->name('invitations.')->group(function () {
+                Route::get('', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'invitations'])->name('index');
+                Route::post('', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'invite'])->name('store');
+                Route::post('bulk', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'bulkInvite'])->name('bulk');
+                Route::post('{id}/resend', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'resendInvitation'])->name('resend');
+                Route::delete('{id}', [\Modules\Settings\Http\Controllers\Admin\SettingsMemberController::class, 'cancelInvitation'])->name('cancel');
+            });
+
+            // ========================================================================
+            // ROLES & PERMISSIONS (À implémenter plus tard)
+            // ========================================================================
+
+            // Route::apiResource('roles', RoleController::class);
+            // Route::apiResource('permissions', PermissionController::class);
         });
 
         // Promotion Management
