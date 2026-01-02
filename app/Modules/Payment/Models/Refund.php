@@ -26,7 +26,7 @@ class Refund extends BaseModel
     ];
 
     protected $casts = [
-        'amount' => 'decimal:2',
+        'amount' => 'integer',
         'gateway_response' => 'array',
     ];
 
@@ -73,11 +73,11 @@ class Refund extends BaseModel
     public function markAsCompleted(?string $refundId = null): self
     {
         $this->status = self::STATUS_COMPLETED;
-        
+
         if ($refundId) {
             $this->refund_id = $refundId;
         }
-        
+
         $this->save();
 
         // Update payment status if fully refunded

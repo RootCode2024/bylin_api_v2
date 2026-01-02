@@ -9,9 +9,9 @@ use Modules\Customer\Models\Customer;
 
 /**
  * Gift Cart Contributor Model
- * 
+ *
  * Represents a contributor to a gift cart
- * 
+ *
  * @property string $id
  * @property string $gift_cart_id
  * @property string $contributor_name
@@ -37,7 +37,7 @@ class GiftCartContributor extends BaseModel
     protected function casts(): array
     {
         return [
-            'contribution_amount' => 'decimal:2',
+            'contribution_amount' => 'integer',
             'contribution_percentage' => 'decimal:2',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',

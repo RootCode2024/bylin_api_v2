@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Modules\Promotion\Models;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Modules\Core\Models\BaseModel;
 use Modules\Customer\Models\Customer;
 use Modules\Order\Models\Order;
 
-class PromotionUsage extends BaseModel
+class PromotionUsage extends Model
 {
     use HasUuids;
 
@@ -24,7 +24,7 @@ class PromotionUsage extends BaseModel
     ];
 
     protected $casts = [
-        'discount_amount' => 'decimal:2',
+        'discount_amount' => 'integer',
     ];
 
     /**

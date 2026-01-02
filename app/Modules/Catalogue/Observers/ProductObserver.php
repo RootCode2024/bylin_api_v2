@@ -21,6 +21,7 @@ use Illuminate\Support\Str;
  * - Génération automatique du slug
  * - Gestion automatique de la précommande selon le stock
  * - Changement automatique du statut
+ * - Validation automatique des produits Bylin (collection + authenticité)
  * - Dispatch des events appropriés
  */
 class ProductObserver
@@ -34,13 +35,13 @@ class ProductObserver
         $product->sku = $this->generateUniqueSku();
         $product->barcode = $this->generateUniqueBarcode();
 
-        // Définir le statut initial selon le stock
+        $this->enforceBylinRules($product);
+
         if ($product->stock_quantity === 0) {
-            if ($product->status === ProductStatus::ACTIVE->value) {
-                $product->status = ProductStatus::OUT_OF_STOCK->value;
+            if ($product->status === ProductStatus::ACTIVE) {
+                $product->status = ProductStatus::OUT_OF_STOCK;
             }
 
-            // Activer la précommande AVANT la création
             if (!$product->is_preorder_enabled) {
                 $this->enableAutomaticPreorder($product);
             }
@@ -57,6 +58,15 @@ class ProductObserver
      */
     public function updating(Product $product): void
     {
+        if ($product->isDirty('brand_id')) {
+            $this->enforceBylinRules($product);
+        }
+
+        // ✅ VALIDATION - Si collection_id est supprimé sur un produit Bylin
+        if ($product->isDirty('collection_id')) {
+            $this->validateCollectionRemoval($product);
+        }
+
         // Vérifier si le stock a changé
         if ($product->isDirty('stock_quantity')) {
             $this->handleStockChange($product);
@@ -79,6 +89,61 @@ class ProductObserver
     public function updated(Product $product): void
     {
         // Les events sont déjà dispatched dans handleStockChange et handleStatusChange
+    }
+
+    /**
+     * ✅ NOUVEAU - Force les règles pour les produits Bylin
+     */
+    protected function enforceBylinRules(Product $product): void
+    {
+        // Charger la relation brand si pas déjà chargée
+        if (!$product->relationLoaded('brand') && $product->brand_id) {
+            $product->load('brand');
+        }
+
+        // Si c'est un produit Bylin
+        if ($product->brand && $product->brand->is_bylin_brand) {
+
+            // 1. collection_id devient OBLIGATOIRE
+            if (empty($product->collection_id)) {
+                throw new \InvalidArgumentException(
+                    'Les produits de la marque Bylin doivent appartenir à une collection. Veuillez sélectionner une collection.'
+                );
+            }
+
+            // 2. requires_authenticity devient automatiquement TRUE
+            $product->requires_authenticity = true;
+
+            // 3. Message informatif (log ou notification)
+            if (!$product->exists) {
+                logger()->info("Produit Bylin créé : {$product->name} - Authenticité activée automatiquement");
+            }
+        } else {
+            // Si ce n'est PAS un produit Bylin
+            // Optionnel : empêcher d'avoir une collection
+            if (!empty($product->collection_id)) {
+                throw new \InvalidArgumentException(
+                    'Seuls les produits de la marque Bylin peuvent appartenir à une collection.'
+                );
+            }
+        }
+    }
+
+    /**
+     * Valide la suppression de collection_id
+     */
+    protected function validateCollectionRemoval(Product $product): void
+    {
+        // Si on essaie de retirer la collection d'un produit Bylin
+        if (!$product->relationLoaded('brand') && $product->brand_id) {
+            $product->load('brand');
+        }
+
+        if ($product->brand && $product->brand->is_bylin_brand && empty($product->collection_id)) {
+            throw new \InvalidArgumentException(
+                'Vous ne pouvez pas retirer la collection d\'un produit Bylin. La collection est obligatoire.'
+            );
+        }
     }
 
     /**
@@ -113,9 +178,9 @@ class ProductObserver
     protected function handleOutOfStock(Product $product, int $previousStock): void
     {
         // Changer le statut en OUT_OF_STOCK si actuellement ACTIVE
-        if ($product->status === ProductStatus::ACTIVE->value) {
-            $oldStatus = ProductStatus::from($product->status);
-            $product->status = ProductStatus::OUT_OF_STOCK->value;
+        if ($product->status === ProductStatus::ACTIVE) {
+            $oldStatus = $product->status;
+            $product->status = ProductStatus::OUT_OF_STOCK;
 
             // Dispatch ProductStatusChanged (sans sauvegarder encore)
             event(new ProductStatusChanged(
@@ -156,9 +221,9 @@ class ProductObserver
         }
 
         // Changer le statut en ACTIVE si actuellement OUT_OF_STOCK ou PREORDER
-        if (in_array($product->status, [ProductStatus::OUT_OF_STOCK->value, ProductStatus::PREORDER->value])) {
-            $oldStatus = ProductStatus::from($product->status);
-            $product->status = ProductStatus::ACTIVE->value;
+        if (in_array($product->status, [ProductStatus::OUT_OF_STOCK, ProductStatus::PREORDER])) {
+            $oldStatus = $product->status;
+            $product->status = ProductStatus::ACTIVE;
 
             event(new ProductStatusChanged(
                 product: $product,
@@ -173,10 +238,16 @@ class ProductObserver
      */
     protected function handleStatusChange(Product $product): void
     {
-        $oldStatus = ProductStatus::from($product->getOriginal('status'));
-        $newStatus = ProductStatus::from($product->status);
+        $oldStatus = $product->getOriginal('status');
+        $newStatus = $product->status;
 
-        // Dispatch ProductStatusChanged
+        if (is_string($oldStatus)) {
+            $oldStatus = ProductStatus::from($oldStatus);
+        }
+        if (is_string($newStatus)) {
+            $newStatus = ProductStatus::from($newStatus);
+        }
+
         event(new ProductStatusChanged(
             product: $product,
             oldStatus: $oldStatus,

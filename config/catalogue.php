@@ -11,6 +11,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Brand Bylin - Configuration
+    |--------------------------------------------------------------------------
+    | ID de la marque Bylin (votre marque principale)
+    | Les produits ajoutés à une collection prennent automatiquement ce brand_id
+    */
+    'bylin_brand_id' => env('BYLIN_BRAND_ID', null),
+
+    /*
+    |--------------------------------------------------------------------------
     | Images – stockage
     |--------------------------------------------------------------------------
     */
@@ -25,6 +34,7 @@ return [
             'products'   => 'products/images',
             'categories' => 'categories/images',
             'banners'    => 'banners/images',
+            'collections' => 'collections/images',
         ],
 
         // Taille max (KB)
@@ -59,6 +69,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Collections Bylin
+    |--------------------------------------------------------------------------
+    */
+    'collections' => [
+        'auto_assign_bylin_brand' => env('COLLECTIONS_AUTO_ASSIGN_BYLIN', true),
+        'remove_brand_on_removal' => env('COLLECTIONS_REMOVE_BRAND_ON_REMOVAL', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Catégories
     |--------------------------------------------------------------------------
     */
@@ -85,15 +105,4 @@ return [
             'default_quantity' => 0,
         ],
     ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Rétro-compatibilité (ANCIEN CODE)
-    |--------------------------------------------------------------------------
-    | Tu peux les supprimer quand tout le code utilisera images.paths.*
-    */
-    'brand_logo_path'      => 'brands/logos',
-    'product_images_path'  => 'products/images',
-    'category_images_path' => 'categories/images',
-    'banner_images_path'   => 'banners/images',
 ];

@@ -33,10 +33,10 @@ class OrderItem extends BaseModel
 
     protected $casts = [
         'quantity' => 'integer',
-        'price' => 'decimal:2',
-        'subtotal' => 'decimal:2',
-        'discount_amount' => 'decimal:2',
-        'total' => 'decimal:2',
+        'price' => 'integer',
+        'subtotal' => 'integer',
+        'discount_amount' => 'integer',
+        'total' => 'integer',
         'options' => 'array',
     ];
 
@@ -81,7 +81,7 @@ class OrderItem extends BaseModel
         if ($this->variation_name) {
             return "{$this->product_name} - {$this->variation_name}";
         }
-        
+
         return $this->product_name;
     }
 }

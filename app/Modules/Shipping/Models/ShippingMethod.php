@@ -29,7 +29,7 @@ class ShippingMethod extends BaseModel
 
     protected $casts = [
         'rate_calculation' => 'array',
-        'base_cost' => 'decimal:2',
+        'base_cost' => 'integer',
         'estimated_delivery_days' => 'integer',
         'is_active' => 'boolean',
         'sort_order' => 'integer',

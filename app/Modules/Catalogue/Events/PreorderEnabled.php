@@ -45,7 +45,7 @@ class PreorderEnabled
             'product_name' => $this->product->name,
             'product_slug' => $this->product->slug,
             'is_automatic' => $this->isAutomatic,
-            'availability_date' => $this->availabilityDate?->format('Y-m-d'),
+            'availability_date' => $this->availabilityDate?->format('d/m/Y'),
             'reason' => $this->reason ?? ($this->isAutomatic ? 'out_of_stock' : 'manual'),
             'current_stock' => $this->product->stock_quantity,
             'activated_at' => now()->toIso8601String(),
@@ -79,7 +79,7 @@ class PreorderEnabled
     {
         $type = $this->isAutomatic ? 'automatic' : 'manual';
         $dateInfo = $this->availabilityDate
-            ? sprintf(' (available: %s)', $this->availabilityDate->format('Y-m-d'))
+            ? sprintf(' (available: %s)', $this->availabilityDate->format('d/m/Y'))
             : '';
 
         return sprintf(

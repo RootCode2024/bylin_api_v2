@@ -13,16 +13,13 @@ use Modules\Catalogue\Models\Product;
 use Modules\Catalogue\Services\ProductService;
 use Modules\Catalogue\Services\PreorderService;
 use Modules\Core\Http\Controllers\ApiController;
-use Modules\Catalogue\Http\Resources\ProductResource;
+use Modules\Catalogue\Models\ProductAuthenticityCode;
 use Modules\Catalogue\Http\Requests\UpdateStockRequest;
 use Modules\Catalogue\Http\Requests\StoreProductRequest;
 use Modules\Catalogue\Http\Requests\UpdateProductRequest;
+use Modules\Catalogue\Http\Requests\EnablePreorderRequest;
+use Modules\Catalogue\Http\Requests\BulkDestroyProductsRequest;
 
-/**
- * Product Controller
- *
- * Handles all product CRUD operations, stock management, and preorder logic
- */
 class ProductController extends ApiController
 {
     public function __construct(
@@ -30,74 +27,34 @@ class ProductController extends ApiController
         private PreorderService $preorderService
     ) {}
 
-    /**
-     * Display a listing of products
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function index(Request $request): JsonResponse
     {
-        $query = Product::query()
-            ->with(['brand', 'categories', 'variations'])
-            ->withCount('variations');
+        $query = Product::query()->with(['brand', 'categories', 'variations', 'media'])->withCount('variations');
 
-        // Search
-        if ($request->filled('search')) {
-            $query->search($request->search);
-        }
+        if ($request->filled('in_stock')) $query->inStock();
+        if ($request->filled('is_featured')) $query->featured();
+        if ($request->filled('is_preorder')) $query->preorder();
+        if ($request->filled('search')) $query->search($request->search);
+        if ($request->filled('status')) $query->where('status', $request->status);
+        if ($request->filled('category_id')) $query->inCategory($request->category_id);
+        if ($request->filled('brand_id')) $query->where('brand_id', $request->brand_id);
+        if ($request->filled('collection_id')) $query->where('collection_id', $request->collection_id);
+        if ($request->filled('min_price') && $request->filled('max_price')) $query->priceBetween($request->min_price, $request->max_price);
 
-        // Filters
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->filled('brand_id')) {
-            $query->where('brand_id', $request->brand_id);
-        }
-
-        if ($request->filled('category_id')) {
-            $query->inCategory($request->category_id);
-        }
-
-        if ($request->filled('is_featured')) {
-            $query->featured();
-        }
-
-        if ($request->filled('in_stock')) {
-            $query->inStock();
-        }
-
-        if ($request->filled('is_preorder')) {
-            $query->preorder();
-        }
-
-        // Price range
-        if ($request->filled('min_price') && $request->filled('max_price')) {
-            $query->priceBetween($request->min_price, $request->max_price);
-        }
-
-        // Sorting
         $sortBy = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
+
         $query->orderBy($sortBy, $sortOrder);
 
-        // Pagination
         $perPage = min($request->get('per_page', 15), 100);
         $products = $query->paginate($perPage);
 
         return $this->successResponse(
             $products,
-            'Products retrieved successfully'
+            'Produits récupérés avec succès'
         );
     }
 
-    /**
-     * Store a newly created product
-     *
-     * @param StoreProductRequest $request
-     * @return JsonResponse
-     */
     public function store(StoreProductRequest $request): JsonResponse
     {
         $product = $this->productService->createProduct($request->validated());
@@ -108,12 +65,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Display the specified product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function show(string $id): JsonResponse
     {
         $product = Product::with([
@@ -130,13 +81,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Update the specified product
-     *
-     * @param string $id
-     * @param UpdateProductRequest $request
-     * @return JsonResponse
-     */
     public function update(string $id, UpdateProductRequest $request): JsonResponse
     {
         $product = $this->productService->updateProduct($id, $request->validated());
@@ -147,12 +91,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Remove the specified product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function destroy(string $id): JsonResponse
     {
         $this->productService->deleteProduct($id);
@@ -163,12 +101,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Restore a soft-deleted product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function restore(string $id): JsonResponse
     {
         $product = Product::withTrashed()->findOrFail($id);
@@ -180,12 +112,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Permanently delete a product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function forceDelete(string $id): JsonResponse
     {
         $product = Product::withTrashed()->findOrFail($id);
@@ -197,13 +123,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Update product stock
-     *
-     * @param string $id
-     * @param UpdateStockRequest $request
-     * @return JsonResponse
-     */
     public function updateStock(string $id, UpdateStockRequest $request): JsonResponse
     {
         Log::alert($request);
@@ -225,9 +144,6 @@ class ProductController extends ApiController
         return $this->errorResponse($result['message'], 400);
     }
 
-    /**
-     * Update variation stock
-     */
     public function updateVariationStock(
         string $productId,
         string $variationId,
@@ -252,9 +168,6 @@ class ProductController extends ApiController
         return $this->errorResponse($result['message'], 400);
     }
 
-    /**
-     * Get stock history for a product
-     */
     public function stockHistory(string $id, Request $request): JsonResponse
     {
         $perPage = $request->input('per_page', 15);
@@ -267,30 +180,16 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Enable preorder for a product
-     *
-     * @param string $id
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function enablePreorder(string $id, Request $request): JsonResponse
+    public function enablePreorder(string $id, EnablePreorderRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'available_date' => 'nullable|date|after:today',
-            'limit' => 'nullable|integer|min:1',
-            'message' => 'nullable|string|max:255',
-            'terms' => 'nullable|string|max:1000',
-        ]);
-
         $product = $this->preorderService->enablePreorder(
             productId: $id,
-            availableDate: isset($validated['available_date'])
-                ? Carbon::parse($validated['available_date'])
+            availableDate: isset($request['available_date'])
+                ? Carbon::parse($request['available_date'])
                 : null,
-            limit: $validated['limit'] ?? null,
-            message: $validated['message'] ?? null,
-            terms: $validated['terms'] ?? null
+            limit: $request['limit'] ?? null,
+            message: $request['message'] ?? null,
+            terms: $request['terms'] ?? null
         );
 
         return $this->successResponse(
@@ -299,12 +198,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Disable preorder for a product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function disablePreorder(string $id): JsonResponse
     {
         $product = $this->preorderService->disablePreorder($id, 'manual');
@@ -315,12 +208,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Get preorder information for a product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function preorderInfo(string $id): JsonResponse
     {
         $info = $this->preorderService->getPreorderInfo($id);
@@ -331,12 +218,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Duplicate a product
-     *
-     * @param string $id
-     * @return JsonResponse
-     */
     public function duplicate(string $id): JsonResponse
     {
         $product = $this->productService->duplicateProduct($id);
@@ -347,12 +228,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Bulk update products
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function bulkUpdate(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -373,11 +248,141 @@ class ProductController extends ApiController
     }
 
     /**
-     * Export products to CSV
-     *
-     * @param Request $request
-     * @return JsonResponse
+     * Suppression en masse de produits (soft delete)
+     * 
+     * Permet de supprimer plusieurs produits à la fois.
+     * Les produits sont placés en corbeille et peuvent être restaurés.
      */
+    public function bulkDestroy(BulkDestroyProductsRequest $request): JsonResponse
+    {
+        try {
+            $count = Product::whereIn('id', $request['ids'])->delete();
+
+            return $this->successResponse(
+                ['deleted_count' => $count],
+                "{$count} produit(s) supprimé(s) avec succès"
+            );
+        } catch (\Exception $e) {
+            Log::error('Échec de la suppression en masse', [
+                'ids' => $request['ids'],
+                'error' => $e->getMessage()
+            ]);
+
+            return $this->errorResponse(
+                'Échec de la suppression des produits : ' . $e->getMessage(),
+                500
+            );
+        }
+    }
+
+    /**
+     * Restauration en masse de produits
+     */
+    public function bulkRestore(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'required|string|exists:products,id'
+        ]);
+
+        try {
+            $count = Product::withTrashed()
+                ->whereIn('id', $validated['ids'])
+                ->restore();
+
+            return $this->successResponse(
+                ['restored_count' => $count],
+                "{$count} produit(s) restauré(s) avec succès"
+            );
+        } catch (\Exception $e) {
+            Log::error('Échec de la restauration en masse', [
+                'ids' => $validated['ids'],
+                'error' => $e->getMessage()
+            ]);
+
+            return $this->errorResponse(
+                'Échec de la restauration : ' . $e->getMessage(),
+                500
+            );
+        }
+    }
+
+    /**
+     * Suppression définitive en masse
+     */
+    public function bulkForceDelete(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'required|string|exists:products,id'
+        ]);
+
+        try {
+            $count = Product::withTrashed()
+                ->whereIn('id', $validated['ids'])
+                ->forceDelete();
+
+            return $this->successResponse(
+                ['deleted_count' => $count],
+                "{$count} produit(s) supprimé(s) définitivement"
+            );
+        } catch (\Exception $e) {
+            Log::error('Échec de la suppression définitive', [
+                'ids' => $validated['ids'],
+                'error' => $e->getMessage()
+            ]);
+
+            return $this->errorResponse(
+                'Échec de la suppression définitive : ' . $e->getMessage(),
+                500
+            );
+        }
+    }
+
+    /**
+     * Obtenir les statistiques des codes d'authenticité d'un produit
+     */
+    public function authenticityStats(string $id): JsonResponse
+    {
+        try {
+            $product = Product::findOrFail($id);
+
+            // Vérifier que c'est un produit Bylin avec authenticité
+            if (!$product->requires_authenticity) {
+                return $this->errorResponse(
+                    'Ce produit ne nécessite pas d\'authenticité',
+                    400
+                );
+            }
+
+            $total = ProductAuthenticityCode::where('product_id', $id)->count();
+            $activated = ProductAuthenticityCode::where('product_id', $id)
+                ->where('is_activated', true)
+                ->count();
+
+            $stats = [
+                'total' => $total,
+                'activated' => $activated,
+                'unactivated' => $total - $activated,
+            ];
+
+            return $this->successResponse(
+                $stats,
+                'Statistiques récupérées avec succès'
+            );
+        } catch (\Exception $e) {
+            Log::error('Erreur récupération stats authenticité', [
+                'product_id' => $id,
+                'error' => $e->getMessage()
+            ]);
+
+            return $this->errorResponse(
+                'Erreur lors de la récupération des statistiques',
+                500
+            );
+        }
+    }
+
     public function export(Request $request): JsonResponse
     {
         $filters = $request->only([
@@ -395,11 +400,6 @@ class ProductController extends ApiController
         );
     }
 
-    /**
-     * Get product statistics
-     *
-     * @return JsonResponse
-     */
     public function statistics(): JsonResponse
     {
         $stats = [

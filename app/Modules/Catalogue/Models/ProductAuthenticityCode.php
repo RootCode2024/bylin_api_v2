@@ -10,9 +10,9 @@ use Modules\Order\Models\Order;
 
 /**
  * Product Authenticity Code Model
- * 
+ *
  * QR codes for verifying Bylin brand product authenticity
- * 
+ *
  * @property string $id
  * @property string $product_id
  * @property string $qr_code
@@ -25,6 +25,7 @@ class ProductAuthenticityCode extends BaseModel
 {
     protected $fillable = [
         'product_id',
+        'collection_id',
         'qr_code',
         'serial_number',
         'is_authentic',
@@ -59,6 +60,28 @@ class ProductAuthenticityCode extends BaseModel
     public function product()
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function collection()
+    {
+        return $this->belongsTo(Collection::class);
+    }
+
+    /**
+     * Scope for codes in a specific collection
+     */
+    public function scopeInCollection($query, string $collectionId)
+    {
+        return $query->where('collection_id', $collectionId);
+    }
+
+    /**
+     * Scope for available codes (authentic and not activated)
+     */
+    public function scopeAvailable($query)
+    {
+        return $query->where('is_authentic', true)
+            ->where('is_activated', false);
     }
 
     /**

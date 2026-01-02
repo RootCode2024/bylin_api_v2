@@ -7,6 +7,7 @@ namespace Modules\User\Http\Controllers;
 use Illuminate\Http\Request;
 use Modules\User\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Modules\User\Services\UserService;
 use Modules\Core\Http\Controllers\ApiController;
@@ -19,6 +20,20 @@ class UserController extends ApiController
     public function __construct(
         private UserService $userService
     ) {}
+
+    /**
+     * Count active super admins
+     */
+    public function countSuperAdmins(Request $request): JsonResponse
+    {
+        $count = User::role('super_admin')
+            ->where('status', 'active')
+            ->count();
+
+        return response()->json([
+            'count' => $count
+        ]);
+    }
 
     /**
      * List users
@@ -97,7 +112,7 @@ class UserController extends ApiController
     {
         $user = User::findOrFail($id);
 
-        if ($user->id === auth()->id()) {
+        if ($user->id === Auth::id()) {
             return $this->errorResponse('Cannot delete yourself', 403);
         }
 

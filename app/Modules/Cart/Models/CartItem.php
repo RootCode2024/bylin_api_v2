@@ -28,8 +28,8 @@ class CartItem extends BaseModel
 
     protected $casts = [
         'quantity' => 'integer',
-        'price' => 'decimal:2',
-        'subtotal' => 'decimal:2',
+        'price' => 'integer',
+        'subtotal' => 'integer',
         'options' => 'array',
     ];
 

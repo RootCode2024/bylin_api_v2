@@ -18,7 +18,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->string('carrier')->nullable(); // DHL, FedEx, etc.
             $table->json('rate_calculation')->nullable(); // Rules for calculating cost
-            $table->decimal('base_cost', 10, 2)->default(0);
+            $table->unsignedBigInteger('base_cost')->default(0);
             $table->integer('estimated_delivery_days')->nullable();
             $table->boolean('is_active')->default(true);
             $table->integer('sort_order')->default(0);
@@ -37,7 +37,7 @@ return new class extends Migration
             $table->string('carrier')->nullable();
             $table->string('status')->default('pending'); // pending, shipped, in_transit, delivered, failed
             $table->json('tracking_events')->nullable();
-            $table->decimal('cost', 10, 2)->default(0);
+            $table->unsignedBigInteger('cost')->default(0);
             $table->date('shipped_date')->nullable();
             $table->date('estimated_delivery_date')->nullable();
             $table->date('delivered_date')->nullable();
@@ -78,11 +78,18 @@ return new class extends Migration
         Schema::create('notifications', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('type'); // order_confirmation, shipping_update, etc.
+            $table->string('title');
+            $table->text('message');
             $table->string('notifiable_type'); // Customer or User
             $table->uuid('notifiable_id');
             $table->string('channel'); // email, sms, push, database
             $table->string('status')->default('pending'); // pending, sent, failed
             $table->json('data')->nullable(); // Notification payload
+            $table->string('action_url')->nullable();
+            $table->string('action_text', 100)->nullable();
+            $table->string('icon', 50)->nullable();
+            $table->enum('priority', ['low', 'normal', 'high', 'urgent'])->default('normal');
+            $table->json('metadata')->nullable();
             $table->timestamp('sent_at')->nullable();
             $table->timestamp('read_at')->nullable();
             $table->text('error_message')->nullable();

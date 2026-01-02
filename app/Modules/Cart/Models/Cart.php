@@ -30,11 +30,11 @@ class Cart extends BaseModel
     ];
 
     protected $casts = [
-        'discount_amount' => 'decimal:2',
-        'subtotal' => 'decimal:2',
-        'tax_amount' => 'decimal:2',
-        'shipping_amount' => 'decimal:2',
-        'total' => 'decimal:2',
+        'discount_amount' => 'integer',
+        'subtotal' => 'integer',
+        'tax_amount' => 'integer',
+        'shipping_amount' => 'integer',
+        'total' => 'integer',
         'metadata' => 'array',
         'expires_at' => 'datetime',
     ];
@@ -148,7 +148,7 @@ class Cart extends BaseModel
             $expirationDays = $days ?? config('cart.guest_cart_expiration_days', 30);
             $this->expires_at = now()->addDays($expirationDays);
         }
-        
+
         $this->save();
     }
 

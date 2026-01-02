@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('transaction_id')->unique()->nullable();
             $table->string('gateway')->default('fedapay'); // fedapay, stripe, cash, etc.
             $table->string('status')->default('pending'); // pending, processing, completed, failed, refunded
-            $table->decimal('amount', 12, 2);
+            $table->unsignedBigInteger('amount');
             $table->string('currency', 3)->default('XOF'); // West African CFA Franc
             $table->string('payment_method')->nullable(); // mobile_money, card, etc.
             $table->json('gateway_response')->nullable(); // Store full response
@@ -35,10 +35,10 @@ return new class extends Migration
         Schema::create('refunds', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('payment_id');
-            $table->string('refund_id')->unique()->nullable(); // Gateway refund ID
-            $table->decimal('amount', 12, 2);
+            $table->string('refund_id')->unique()->nullable();
+            $table->unsignedBigInteger('amount');
             $table->string('reason')->nullable();
-            $table->string('status')->default('pending'); // pending, completed, failed
+            $table->string('status')->default('pending'); // pending, processed, failed
             $table->json('gateway_response')->nullable();
             $table->uuid('created_by')->nullable(); // Admin who initiated refund
             $table->timestamps();

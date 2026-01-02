@@ -35,9 +35,9 @@ class Promotion extends BaseModel
     ];
 
     protected $casts = [
-        'value' => 'decimal:2',
-        'min_purchase_amount' => 'decimal:2',
-        'max_discount_amount' => 'decimal:2',
+        'value' => 'integer',
+        'min_purchase_amount' => 'integer',
+        'max_discount_amount' => 'integer',
         'usage_limit' => 'integer',
         'usage_limit_per_customer' => 'integer',
         'usage_count' => 'integer',
@@ -49,46 +49,56 @@ class Promotion extends BaseModel
         'metadata' => 'array',
     ];
 
-    // Type constants
     public const TYPE_PERCENTAGE = 'percentage';
-    public const TYPE_FIXED = 'fixed';
+    public const TYPE_FIXED_AMOUNT = 'fixed_amount';
     public const TYPE_BUY_X_GET_Y = 'buy_x_get_y';
 
-    /**
-     * Get the promotion usages
-     */
     public function usages(): HasMany
     {
         return $this->hasMany(PromotionUsage::class);
     }
 
-    /**
-     * Scope for active promotions
-     */
     public function scopeActive($query)
     {
         return $query->where('is_active', true)
             ->where(function ($q) {
                 $q->whereNull('starts_at')
-                  ->orWhere('starts_at', '<=', now());
+                    ->orWhere('starts_at', '<=', now());
             })
             ->where(function ($q) {
                 $q->whereNull('expires_at')
-                  ->orWhere('expires_at', '>=', now());
+                    ->orWhere('expires_at', '>=', now());
             });
     }
 
-    /**
-     * Scope for code search
-     */
     public function scopeByCode($query, string $code)
     {
-        return $query->where('code', strtoupper($code));
+        return $query->where('code', strtoupper(trim($code)));
     }
 
-    /**
-     * Check if promotion is currently active
-     */
+    public function scopeOfType($query, string $type)
+    {
+        return $query->where('type', $type);
+    }
+
+    public function scopeExpired($query)
+    {
+        return $query->whereNotNull('expires_at')
+            ->where('expires_at', '<', now());
+    }
+
+    public function scopeUpcoming($query)
+    {
+        return $query->whereNotNull('starts_at')
+            ->where('starts_at', '>', now());
+    }
+
+    public function scopeExhausted($query)
+    {
+        return $query->whereNotNull('usage_limit')
+            ->whereColumn('usage_count', '>=', 'usage_limit');
+    }
+
     public function isActive(): bool
     {
         if (!$this->is_active) {
@@ -108,9 +118,6 @@ class Promotion extends BaseModel
         return true;
     }
 
-    /**
-     * Check if promotion has reached usage limit
-     */
     public function hasReachedLimit(): bool
     {
         if (!$this->usage_limit) {
@@ -120,11 +127,12 @@ class Promotion extends BaseModel
         return $this->usage_count >= $this->usage_limit;
     }
 
-    /**
-     * Check if customer has reached their usage limit
-     */
     public function hasCustomerReachedLimit(string $customerId): bool
     {
+        if (!$this->usage_limit_per_customer) {
+            return false;
+        }
+
         $customerUsageCount = $this->usages()
             ->where('customer_id', $customerId)
             ->count();
@@ -134,8 +142,9 @@ class Promotion extends BaseModel
 
     /**
      * Check if promotion is applicable to given amount
+     * @param int $amount Montant en centimes/francs
      */
-    public function isApplicableToAmount(float $amount): bool
+    public function isApplicableToAmount(int $amount): bool
     {
         if (!$this->min_purchase_amount) {
             return true;
@@ -146,12 +155,15 @@ class Promotion extends BaseModel
 
     /**
      * Calculate discount amount
+     * @param int $amount Montant en centimes/francs
+     * @return int Remise en centimes/francs
      */
-    public function calculateDiscount(float $amount): float
+    public function calculateDiscount(int $amount): int
     {
         if ($this->type === self::TYPE_PERCENTAGE) {
-            $discount = ($amount * $this->value) / 100;
-        } elseif ($this->type === self::TYPE_FIXED) {
+            // Calcul avec arrondi pour éviter les pertes de précision
+            $discount = (int) round(($amount * $this->value) / 100);
+        } elseif ($this->type === self::TYPE_FIXED_AMOUNT) {
             $discount = $this->value;
         } else {
             // For buy_x_get_y, calculation is more complex and handled in service
@@ -168,33 +180,33 @@ class Promotion extends BaseModel
             $discount = $amount;
         }
 
-        return round($discount, 2);
+        return $discount;
     }
 
-    /**
-     * Increment usage count
-     */
     public function incrementUsage(): void
     {
         $this->increment('usage_count');
     }
 
-    /**
-     * Boot the model
-     */
     protected static function boot(): void
     {
         parent::boot();
 
         static::creating(function ($promotion) {
-            // Normalize code to uppercase
             if ($promotion->code) {
                 $promotion->code = strtoupper($promotion->code);
+            }
+
+            if ($promotion->usage_count === null) {
+                $promotion->usage_count = 0;
+            }
+
+            if ($promotion->usage_limit_per_customer === null) {
+                $promotion->usage_limit_per_customer = 1;
             }
         });
 
         static::updating(function ($promotion) {
-            // Normalize code to uppercase
             if ($promotion->isDirty('code') && $promotion->code) {
                 $promotion->code = strtoupper($promotion->code);
             }

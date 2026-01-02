@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations
-     */
     public function up(): void
     {
         /*
@@ -20,8 +17,11 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->string('name')->unique();
             $table->string('slug')->unique();
+            $table->boolean('is_bylin_brand')
+                ->default(false)
+                ->after('slug')
+                ->comment('Identifie si c\'est la marque Bylin (codes authenticité requis)');
             $table->text('description')->nullable();
-            $table->string('logo')->nullable();
             $table->string('website')->nullable();
             $table->boolean('is_active')->default(true);
             $table->integer('sort_order')->default(0);
@@ -30,55 +30,93 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->index('slug');
+            $table->index('is_bylin_brand');
             $table->index('is_active');
         });
 
         /*
         |--------------------------------------------------------------------------
-        | CATEGORIES (sans FK auto-référencée ici)
+        | COLLECTIONS
+        |--------------------------------------------------------------------------
+        */
+        Schema::create('collections', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+
+            // Basic info
+            $table->string('name');
+            $table->string('slug')->unique();
+            $table->text('description')->nullable();
+
+            // Collection metadata
+            $table->string('season')->nullable()->comment('Ex: Printemps 2024, Hiver 2025');
+            $table->string('theme')->nullable()->comment('Ex: Urban, Streetwear, Classic');
+            $table->date('release_date')->nullable();
+            $table->date('end_date')->nullable()->comment('Date de fin de disponibilité');
+
+            // Status & visibility
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_featured')->default(false);
+            $table->integer('sort_order')->default(0);
+
+            // Stats
+            $table->integer('products_count')->default(0);
+            $table->integer('total_stock')->default(0);
+
+            // SEO
+            $table->string('meta_title')->nullable();
+            $table->text('meta_description')->nullable();
+            $table->json('meta_keywords')->nullable();
+
+            // Extra data
+            $table->json('meta_data')->nullable();
+
+            $table->timestamps();
+            $table->softDeletes();
+
+            // Indexes
+            $table->index('slug');
+            $table->index('is_active');
+            $table->index('is_featured');
+            $table->index('release_date');
+            $table->index('sort_order');
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | CATEGORIES
         |--------------------------------------------------------------------------
         */
         Schema::create('categories', function (Blueprint $table) {
             $table->uuid('id')->primary();
 
-            // Hiérarchie
             $table->uuid('parent_id')->nullable();
 
-            // Informations de base
             $table->string('name', 100);
             $table->string('slug', 150)->unique();
             $table->text('description')->nullable();
 
-            // Média
             $table->string('image')->nullable();
             $table->string('icon', 50)->nullable();
             $table->string('color', 7)->nullable();
 
-            // Hiérarchie calculée
             $table->tinyInteger('level')->default(0);
             $table->string('path', 500)->nullable();
 
-            // Configuration
             $table->boolean('is_active')->default(true);
             $table->boolean('is_visible_in_menu')->default(true);
             $table->boolean('is_featured')->default(false);
             $table->integer('sort_order')->default(0);
 
-            // SEO
             $table->string('meta_title')->nullable();
             $table->text('meta_description')->nullable();
 
-            // Statistiques
             $table->integer('products_count')->default(0);
 
-            // Métadonnées
             $table->json('meta_data')->nullable();
 
-            // Timestamps
             $table->timestamps();
             $table->softDeletes();
 
-            // Index
             $table->index('parent_id');
             $table->index('level');
             $table->index('path');
@@ -87,11 +125,6 @@ return new class extends Migration
             $table->index('deleted_at');
         });
 
-        /*
-        |--------------------------------------------------------------------------
-        | FK auto-référencée categories.parent_id (POSTGRES SAFE)
-        |--------------------------------------------------------------------------
-        */
         Schema::table('categories', function (Blueprint $table) {
             $table->foreign('parent_id')
                 ->references('id')
@@ -107,6 +140,12 @@ return new class extends Migration
         Schema::create('products', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('brand_id')->nullable();
+            $table->foreignUuid('collection_id')
+                ->nullable()
+                ->after('brand_id')
+                ->constrained('collections')
+                ->nullOnDelete()
+                ->comment('Collection Bylin (uniquement pour produits Bylin)');
 
             $table->string('name');
             $table->string('slug')->unique();
@@ -115,11 +154,21 @@ return new class extends Migration
             $table->text('short_description')->nullable();
             $table->text('description')->nullable();
 
-            $table->decimal('price', 12, 2);
-            $table->decimal('compare_price', 12, 2)->nullable();
-            $table->decimal('cost_price', 12, 2)->nullable();
+            $table->unsignedBigInteger('price');
+            $table->unsignedBigInteger('compare_price')->nullable();
+            $table->unsignedBigInteger('cost_price')->nullable();
 
             $table->string('status')->default('draft');
+            $table->boolean('is_preorder_enabled')->default(false);
+            $table->boolean('requires_authenticity')->default(false);
+            $table->integer('authenticity_codes_count')->default(0);
+            $table->boolean('preorder_auto_enabled')->default(false);
+            $table->dateTime('preorder_available_date')->nullable();
+            $table->integer('preorder_limit')->nullable();
+            $table->integer('preorder_count')->default(0);
+            $table->text('preorder_message')->nullable();
+            $table->text('preorder_terms')->nullable();
+            $table->dateTime('preorder_enabled_at')->nullable();
             $table->boolean('is_featured')->default(false);
             $table->boolean('is_new')->default(false);
             $table->boolean('is_on_sale')->default(false);
@@ -131,7 +180,11 @@ return new class extends Migration
             $table->string('barcode')->nullable();
             $table->decimal('weight', 8, 2)->nullable();
             $table->json('dimensions')->nullable();
+
             $table->json('meta_data')->nullable();
+            $table->string('meta_title')->nullable();
+            $table->text('meta_description')->nullable();
+            $table->text('meta_keywords')->nullable();
 
             $table->integer('views_count')->default(0);
             $table->decimal('rating_average', 3, 2)->default(0);
@@ -148,8 +201,13 @@ return new class extends Migration
             $table->index('slug');
             $table->index('sku');
             $table->index('status');
+            $table->index('is_preorder_enabled');
+            $table->index(['is_preorder_enabled', 'preorder_available_date']);
+            $table->index('requires_authenticity');
             $table->index('is_featured');
             $table->index('brand_id');
+            $table->index('collection_id');
+            $table->index(['brand_id', 'collection_id']);
             $table->index('price');
         });
 
@@ -208,9 +266,9 @@ return new class extends Migration
 
             $table->string('sku')->unique();
             $table->string('variation_name');
-            $table->decimal('price', 12, 2);
-            $table->decimal('compare_price', 12, 2)->nullable();
-            $table->decimal('cost_price', 12, 2)->nullable();
+            $table->unsignedBigInteger('price');
+            $table->unsignedBigInteger('compare_price')->nullable();
+            $table->unsignedBigInteger('cost_price')->nullable();
             $table->integer('stock_quantity')->default(0);
             $table->string('stock_status')->default('in_stock');
             $table->string('barcode')->nullable();
@@ -241,6 +299,7 @@ return new class extends Migration
         Schema::dropIfExists('category_product');
         Schema::dropIfExists('products');
         Schema::dropIfExists('categories');
+        Schema::dropIfExists('collections');
         Schema::dropIfExists('brands');
     }
 };
