@@ -6,8 +6,11 @@ namespace Modules\User\Models;
 
 use Laravel\Sanctum\HasApiTokens;
 use Modules\Core\Traits\HasStatus;
+use Illuminate\Support\Facades\Log;
 use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Auth\Passwords\CanResetPassword;
+use App\Notifications\ResetPasswordNotification;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -29,6 +32,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, HasUuids, Notifiable, HasRoles, HasStatus;
+    use CanResetPassword;
 
     /**
      * The primary key type
@@ -105,5 +109,30 @@ class User extends Authenticatable
 
         $this->status = $status;
         return $this->save();
+    }
+
+    /**
+     * Envoyer la notification de réinitialisation de mot de passe
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        try {
+            Log::info('Envoi de notification de réinitialisation', [
+                'user_id' => $this->id,
+                'email' => $this->email,
+                'token' => substr($token, 0, 10) . '...' // Log partiel du token
+            ]);
+
+            $this->notify(new ResetPasswordNotification($token));
+
+            Log::info('Notification envoyée avec succès');
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de l\'envoi de la notification', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            throw $e;
+        }
     }
 }

@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace Modules\Security\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Modules\Core\Models\BaseModel;
 
-class LoginHistory extends BaseModel
+class LoginHistory extends Model
 {
     use HasUuids;
 

@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Modules\Security\Services;
 
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
-use Modules\Security\Models\LoginHistory;
+use Illuminate\Database\Eloquent\Model;
 use Modules\Security\Models\UserDevice;
+use Modules\Security\Models\LoginHistory;
 
 class LoginHistoryService
 {
@@ -16,26 +17,43 @@ class LoginHistoryService
     ) {}
 
     /**
+     * Record a successful login attempt
+     * Alias pour recordLogin avec userAgent
+     */
+    public function recordSuccessfulLogin(Model $user, string $ip, ?string $userAgent = null): LoginHistory
+    {
+        // Si pas de userAgent fourni, essayer de le récupérer de la requête
+        if (!$userAgent) {
+            $userAgent = request()->userAgent() ?? 'Unknown';
+        }
+
+        // Réinitialiser le compteur d'échecs pour cette IP
+        Cache::forget("login_failures:{$ip}");
+
+        return $this->recordLogin($user, $ip, $userAgent);
+    }
+
+    /**
      * Record a login attempt
      */
     public function recordLogin(Model $user, string $ip, string $userAgent): LoginHistory
     {
         // Detect device
         $deviceInfo = $this->deviceDetection->detectDevice($userAgent);
-        
+
         // Get geolocation
         $location = $this->deviceDetection->getGeolocation($ip);
-        
+
         // Generate device fingerprint
         $fingerprint = $this->deviceDetection->generateFingerprint($ip, $userAgent);
-        
+
         // Check if new device
         $isNewDevice = !$this->deviceExists($user, $fingerprint);
-        
+
         // Check if new location
-        $isNewLocation = $location['country'] && 
-                        !$this->locationExists($user, $location['country_code']);
-        
+        $isNewLocation = $location['country'] &&
+            !$this->locationExists($user, $location['country_code']);
+
         // Create login record
         $login = LoginHistory::create([
             'user_id' => $user->id,
@@ -56,21 +74,18 @@ class LoginHistoryService
             'is_suspicious' => $this->isSuspicious($user, $ip, $location),
             'login_at' => now(),
         ]);
-        
+
         // Update or create device
         $this->updateOrCreateDevice($user, $fingerprint, $deviceInfo, $ip, $location);
-        
+
         // Send security alerts if enabled
         if (config('security.new_device_alert_enabled', true) && $isNewDevice) {
             \Modules\Notification\Jobs\SendSecurityAlert::dispatch($user, $deviceInfo, $location);
         }
-        
+
         return $login;
     }
 
-    /**
-     * Record logout
-     */
     /**
      * Record logout
      */
@@ -80,7 +95,7 @@ class LoginHistoryService
             ->whereNull('logout_at')
             ->latest('login_at')
             ->first();
-            
+
         if ($lastLogin) {
             $lastLogin->markAsLoggedOut();
         }
@@ -89,25 +104,86 @@ class LoginHistoryService
     /**
      * Record a failed login attempt
      */
-    public function recordFailedLogin(string $ip, ?string $email = null): void
+    public function recordFailedLogin(string $ip, ?string $email = null, ?string $reason = null): void
     {
         $key = "login_failures:{$ip}";
-        
+
         // Increment failure count, expire after 1 hour
         $failures = Cache::increment($key);
-        
+
         if ($failures === 1) {
             Cache::put($key, 1, now()->addHour());
         }
-        
+
         // Log if high number of failures
         if ($failures >= 5) {
-            \Log::warning('High number of failed login attempts from IP', [
+            Log::warning('Nombre élevé de tentatives de connexion échouées depuis une IP', [
                 'ip' => $ip,
                 'count' => $failures,
                 'last_email_attempt' => $email,
+                'reason' => $reason,
             ]);
         }
+
+        // Optionnel : Enregistrer dans la base de données
+        if ($failures >= 3) {
+            $this->recordFailedLoginInDatabase($ip, $email, $reason, $failures);
+        }
+    }
+
+    /**
+     * Enregistrer les échecs de connexion dans la base de données
+     */
+    private function recordFailedLoginInDatabase(string $ip, ?string $email, ?string $reason, int $attemptCount): void
+    {
+        // Si vous avez une table pour les échecs de connexion
+        // FailedLoginAttempt::create([
+        //     'ip_address' => $ip,
+        //     'email' => $email,
+        //     'reason' => $reason,
+        //     'attempt_count' => $attemptCount,
+        //     'attempted_at' => now(),
+        // ]);
+    }
+
+    /**
+     * Get the number of failed login attempts for an IP
+     */
+    public function getFailedAttempts(string $ip): int
+    {
+        return Cache::get("login_failures:{$ip}", 0);
+    }
+
+    /**
+     * Check if IP is temporarily locked out
+     */
+    public function isLockedOut(string $ip, int $maxAttempts = 5): bool
+    {
+        return $this->getFailedAttempts($ip) >= $maxAttempts;
+    }
+
+    /**
+     * Get remaining lockout time in seconds
+     */
+    public function getRemainingLockoutTime(string $ip): ?int
+    {
+        $key = "login_failures:{$ip}";
+
+        if (!Cache::has($key)) {
+            return null;
+        }
+
+        // Cache expire après 1 heure (3600 secondes)
+        // Vous pourriez stocker le timestamp exact pour plus de précision
+        return 3600;
+    }
+
+    /**
+     * Clear failed login attempts for an IP
+     */
+    public function clearFailedAttempts(string $ip): void
+    {
+        Cache::forget("login_failures:{$ip}");
     }
 
     /**
@@ -162,7 +238,7 @@ class LoginHistoryService
         if (!$countryCode) {
             return true; // Don't alert for unknown locations
         }
-        
+
         return LoginHistory::forUser($user->id, get_class($user))
             ->where('country_code', $countryCode)
             ->exists();
@@ -177,23 +253,23 @@ class LoginHistoryService
         $lastLogin = LoginHistory::forUser($user->id, get_class($user))
             ->latest('login_at')
             ->first();
-            
+
         if ($lastLogin && $lastLogin->country_code && $location['country_code']) {
             $timeDiff = now()->diffInHours($lastLogin->login_at);
-            
+
             // If different country within 1 hour = suspicious
             if ($lastLogin->country_code !== $location['country_code'] && $timeDiff < 1) {
                 return true;
             }
         }
-        
+
         // Check for multiple failed attempts from this IP
-        $failures = Cache::get("login_failures:{$ip}", 0);
-        
+        $failures = $this->getFailedAttempts($ip);
+
         if ($failures >= 3) {
             return true;
         }
-        
+
         return false;
     }
 
@@ -210,13 +286,13 @@ class LoginHistoryService
         $device = UserDevice::forUser($user->id, get_class($user))
             ->where('device_fingerprint', $fingerprint)
             ->first();
-            
+
         if ($device) {
             // Update existing device
             $device->updateActivity($ip, $location['country'], $location['city']);
             return $device;
         }
-        
+
         // Create new device
         return UserDevice::create([
             'user_id' => $user->id,
